@@ -325,7 +325,7 @@ static void MX_CAN1_Init(void)
   static CanRxMsgTypeDef        RxMessage;
   
   // Configuration of interface
-  hcan1.Instance = CAN;
+  hcan1.Instance = CAN1;
   hcan1.pTxMsg = &TxMessage;
   hcan1.pRxMsg = &RxMessage;
   hcan1.Init.TTCM = DISABLE;
@@ -376,7 +376,7 @@ static void MX_CAN1_Init(void)
   hcan1.Init.SJW = CAN_SJW_1TQ;
   hcan1.Init.BS1 = CAN_BS1_16TQ;
   hcan1.Init.BS2 = CAN_BS2_3TQ;
-  hcan1.Init.Prescaler = 2;
+  hcan1.Init.Prescaler = 1;
 
   if (HAL_CAN_Init(&hcan1) != HAL_OK)
   {

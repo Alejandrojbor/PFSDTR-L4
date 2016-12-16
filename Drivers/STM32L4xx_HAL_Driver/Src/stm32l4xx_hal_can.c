@@ -209,16 +209,17 @@ HAL_StatusTypeDef HAL_CAN_Init(CAN_HandleTypeDef* hcan)
   /* Get tick */
   tickstart = HAL_GetTick();
 
+
   /* Wait the acknowledge */
   while((hcan->Instance->MSR & CAN_MSR_INAK) != CAN_MSR_INAK)
   {
-    if((HAL_GetTick()-tickstart) > CAN_TIMEOUT_VALUE)
-    {
-      hcan->State= HAL_CAN_STATE_TIMEOUT;
-      /* Process unlocked */
-      __HAL_UNLOCK(hcan);
-      return HAL_TIMEOUT;
-    }
+//    if((HAL_GetTick()-tickstart) > CAN_TIMEOUT_VALUE)
+//    {
+//      hcan->State= HAL_CAN_STATE_TIMEOUT;
+//      /* Process unlocked */
+//      __HAL_UNLOCK(hcan);
+//      return HAL_TIMEOUT;
+//    }
   }
 
   /* Check acknowledge */
@@ -300,13 +301,13 @@ HAL_StatusTypeDef HAL_CAN_Init(CAN_HandleTypeDef* hcan)
     /* Wait the acknowledge */
     while((hcan->Instance->MSR & CAN_MSR_INAK) == CAN_MSR_INAK)
     {
-      if((HAL_GetTick()-tickstart) > CAN_TIMEOUT_VALUE)
-      {
-         hcan->State= HAL_CAN_STATE_TIMEOUT;
-         /* Process unlocked */
-         __HAL_UNLOCK(hcan);
-         return HAL_TIMEOUT;
-      }
+//      if((HAL_GetTick()-tickstart) > CAN_TIMEOUT_VALUE)
+//      {
+//         hcan->State= HAL_CAN_STATE_TIMEOUT;
+//         /* Process unlocked */
+//         __HAL_UNLOCK(hcan);
+//         return HAL_TIMEOUT;
+//      }
     }
 
     /* Check acknowledged */

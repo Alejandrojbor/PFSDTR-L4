@@ -87,7 +87,7 @@ void HAL_CAN_MspInit(CAN_HandleTypeDef* hcan)
 {
 
   GPIO_InitTypeDef GPIO_InitStruct;
-  if(hcan->Instance==CAN)
+  if(hcan->Instance==CAN1)
   {
   /* USER CODE BEGIN CAN_MspInit 0 */
 
@@ -125,7 +125,7 @@ void HAL_CAN_MspInit(CAN_HandleTypeDef* hcan)
 void HAL_CAN_MspDeInit(CAN_HandleTypeDef* hcan)
 {
 
-  if(hcan->Instance==CAN)
+  if(hcan->Instance==CAN1)
   {
   /* USER CODE BEGIN CAN_MspDeInit 0 */
 
