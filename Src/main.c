@@ -29,59 +29,13 @@
   * 			Program Queues for tasks
   *
   */
-/* Defines -------------------------------------------------------------------*/
-
-//#define RTOS 'C' 				// Use CMSIS_OS
-#define RTOS 'F'					// Use FreeRTOS
-
-#if RTOS == 'C'
-#define CMSISOS
-#endif
-
-#define 	LED_GREEN_GPIO_Port 	GPIOE
-#define 	LED_RED_GPIO_Port   	GPIOB
-#define		LED_GREEN				GPIO_PIN_8
-#define		LED_RED	 				GPIO_PIN_2
-#define		LED_GREEN_ON()			HAL_GPIO_WritePin(GPIOE, GPIO_PIN_8, GPIO_PIN_SET)
-#define		LED_RED_ON()			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, GPIO_PIN_SET)
-#define		LED_GREEN_OFF()			HAL_GPIO_WritePin(GPIOE, GPIO_PIN_8, GPIO_PIN_RESET)
-#define		LED_RED_OFF()			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, GPIO_PIN_RESET)
-#define		LED_GREEN_TOGGLE()		HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_8)
-#define		LED_RED_TOGGLE()		HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_2)
-
-#define		BUTTON_PRESSED		1
-
-#define __portNVIC_SYSTICK_CTRL_REG		( * ( ( volatile uint32_t * ) 0xe000e010 ) )
-#define __portNVIC_SYSTICK_LOAD_REG		( * ( ( volatile uint32_t * ) 0xe000e014 ) )
-#define portNVIC_SYSTICK_CLK_BIT			( 1UL << 2UL )
-#define portNVIC_SYSTICK_INT_BIT			( 1UL << 1UL )
-#define portNVIC_SYSTICK_ENABLE_BIT			( 1UL << 0UL )
-
-#define RCC_PLLN_MASK    ((uint32_t)0x00007F00)
-#define RCC_PLLN_POS     8
-#define RCC_PLLR_MASK    ((uint32_t)0x06000000)
-#define RCC_PLLR_POS     25
-
-#define THIS_CPU 0 			// Current cpu number
-#define TASK_CNT 24 			// Number of tasks
-#define MSG_CNT 22 			// Number of system messages
-#define HYPERPERIOD 276 		// Number of system hyperperiod slots
-#define ONE_TICK ( ( configCPU_CLOCK_HZ / configTICK_RATE_HZ ) - 1UL )
-
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32l4xx_hal.h"
-
-#ifdef CMSISOS
-#include "cmsis_os.h"
-#else
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
-#endif
-
-
 
 /* Private variables ---------------------------------------------------------*/
 CAN_HandleTypeDef hcan1;
@@ -101,12 +55,6 @@ SPI_HandleTypeDef hspi2;
 UART_HandleTypeDef huart2;
 
 RCC_OscInitTypeDef RCC_OscInitStruct;
-
-#ifdef CMSISOS
-osThreadId defaultTaskHandle;
-osThreadId myTask02Handle;
-osMessageQId myQueue01Handle;
-#endif
 
 uint32_t current_freq = 100;
 uint32_t frq = 25;
@@ -178,16 +126,12 @@ static void MX_SPI2_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_CAN1_Init(void);
 
-#ifdef CMSISOS
-void StartDefaultTask(void const * argument);
-void StartTask02(void const * argument);
-#else
 static void TEST_CAN( void* pvParams );
 //static void Task_Body( void* pvParams );
 //static void Task_Body1( void* pvParams );
 //static void Task_Body2( void* pvParams );
 //static void Task_Body3( void* pvParams );
-#endif
+
 
 /* Private function prototypes -----------------------------------------------*/
 HAL_StatusTypeDef ALE_CAN_Receive_IT(CAN_HandleTypeDef *hcan, uint8_t FIFONumber);
@@ -225,38 +169,21 @@ int main(void)
   /* start timers, add new ones, ... */
 
   /* Thread creation -------------------------------------------------------------*/
-#ifdef CMSISOS
-  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
-  defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
-
-  /* definition and creation of myTask02 */
-  osThreadDef(myTask02, StartTask02, osPriorityIdle, 0, 128);
-  myTask02Handle = osThreadCreate(osThread(myTask02), NULL);
-#else
 xTaskCreate( TEST_CAN, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
 //  xTaskCreate( Task_Body, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
 //  xTaskCreate( Task_Body1, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
 //  xTaskCreate( Task_Body2, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
 //  xTaskCreate( Task_Body3, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
-#endif
+
 
   /* Queues creation -------------------------------------------------------------*/
- #ifdef CMSISOS
-   /* definition and creation of myQueue01 */
-  osMessageQDef(myQueue01, 16, uint16_t);
-  myQueue01Handle = osMessageCreate(osMessageQ(myQueue01), NULL);
-#else
-  // Configurar Colas!! 
-#endif
- 
 
+  // Configurar Colas!! 
+
+ 
   /* Start scheduler */
-#ifdef CMSISOS
-  osKernelStart();
-#else
   vTaskStartScheduler();
-#endif
-    
+
   /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
@@ -968,29 +895,6 @@ HAL_StatusTypeDef ALE_CAN_Receive_IT(CAN_HandleTypeDef* hcan, uint8_t FIFONumber
 }
 
 
-#ifdef CMSISOS
-/* StartDefaultTask function */
-void StartDefaultTask(void const * argument)
-{
-  /* Infinite loop */
-  for(;;)
-  {
-    HAL_GPIO_TogglePin(LD_G_GPIO_Port, LD_G_Pin);
-    osDelay(100);
-  }
-}
-
-/* StartTask02 function */
-void StartTask02(void const * argument)
-{
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-}
-#else
-
 static void TEST_CAN( void* pvParams )
 {
 	/* A pointer to the subject task's name, which is a standard NULL terminated
@@ -1146,12 +1050,6 @@ void TEST_GenericFunc( void* params)
   vTaskDelete( NULL );
 }
 
-
-
-
-
-
-#endif
 
 void vUtilsEatCpu( UBaseType_t ticks )
 {

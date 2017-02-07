@@ -190,6 +190,35 @@
 #define XL_INT_Pin GPIO_PIN_1
 #define XL_INT_GPIO_Port GPIOE
 /* USER CODE BEGIN Private defines */
+#define 	LED_GREEN_GPIO_Port 	GPIOE
+#define 	LED_RED_GPIO_Port   	GPIOB
+#define		LED_GREEN				GPIO_PIN_8
+#define		LED_RED	 				GPIO_PIN_2
+#define		LED_GREEN_ON()			HAL_GPIO_WritePin(GPIOE, GPIO_PIN_8, GPIO_PIN_SET)
+#define		LED_RED_ON()			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, GPIO_PIN_SET)
+#define		LED_GREEN_OFF()			HAL_GPIO_WritePin(GPIOE, GPIO_PIN_8, GPIO_PIN_RESET)
+#define		LED_RED_OFF()			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, GPIO_PIN_RESET)
+#define		LED_GREEN_TOGGLE()		HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_8)
+#define		LED_RED_TOGGLE()		HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_2)
+
+#define		BUTTON_PRESSED		1
+
+#define __portNVIC_SYSTICK_CTRL_REG		( * ( ( volatile uint32_t * ) 0xe000e010 ) )
+#define __portNVIC_SYSTICK_LOAD_REG		( * ( ( volatile uint32_t * ) 0xe000e014 ) )
+#define portNVIC_SYSTICK_CLK_BIT			( 1UL << 2UL )
+#define portNVIC_SYSTICK_INT_BIT			( 1UL << 1UL )
+#define portNVIC_SYSTICK_ENABLE_BIT			( 1UL << 0UL )
+
+#define RCC_PLLN_MASK    ((uint32_t)0x00007F00)
+#define RCC_PLLN_POS     8
+#define RCC_PLLR_MASK    ((uint32_t)0x06000000)
+#define RCC_PLLR_POS     25
+
+#define THIS_CPU 0 			// Current cpu number
+#define TASK_CNT 24 			// Number of tasks
+#define MSG_CNT 22 			// Number of system messages
+#define HYPERPERIOD 276 		// Number of system hyperperiod slots
+#define ONE_TICK ( ( configCPU_CLOCK_HZ / configTICK_RATE_HZ ) - 1UL )
 
 /* USER CODE END Private defines */
 
