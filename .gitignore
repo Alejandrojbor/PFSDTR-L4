@@ -1,0 +1,8 @@
+*.[ao]
+*.map
+*.list
+*.mk
+!SW4STM32/PFSDTR-L4/Debug/PFSDTR-L4.bin
+!SW4STM32/PFSDTR-L4/Debug/PFSDTR-L4.elf
+!SW4STM32/PFSDTR-L4/Debug/makefile
+

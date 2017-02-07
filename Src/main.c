@@ -1,7 +1,7 @@
 /**
   ******************************************************************************
   *  Name        : main.c
-  *  Author      : Alejandro Borghero
+  *  Author      : Alejandro Borghero & Gabriel Eggly
   *  Version     :
   *  Copyright   : GPLv3
   *  Description : Planificación Óptima de un Sistema Multiprocesador de Tiempo 
@@ -29,10 +29,7 @@
   * 			Program Queues for tasks
   *
   */
-/* Includes ------------------------------------------------------------------*/
-#include "main.h"
-#include "stm32l4xx_hal.h"
-
+/* Defines -------------------------------------------------------------------*/
 
 //#define RTOS 'C' 				// Use CMSIS_OS
 #define RTOS 'F'					// Use FreeRTOS
@@ -40,6 +37,41 @@
 #if RTOS == 'C'
 #define CMSISOS
 #endif
+
+#define 	LED_GREEN_GPIO_Port 	GPIOE
+#define 	LED_RED_GPIO_Port   	GPIOB
+#define		LED_GREEN				GPIO_PIN_8
+#define		LED_RED	 				GPIO_PIN_2
+#define		LED_GREEN_ON()			HAL_GPIO_WritePin(GPIOE, GPIO_PIN_8, GPIO_PIN_SET)
+#define		LED_RED_ON()			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, GPIO_PIN_SET)
+#define		LED_GREEN_OFF()			HAL_GPIO_WritePin(GPIOE, GPIO_PIN_8, GPIO_PIN_RESET)
+#define		LED_RED_OFF()			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, GPIO_PIN_RESET)
+#define		LED_GREEN_TOGGLE()		HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_8)
+#define		LED_RED_TOGGLE()		HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_2)
+
+#define		BUTTON_PRESSED		1
+
+#define __portNVIC_SYSTICK_CTRL_REG		( * ( ( volatile uint32_t * ) 0xe000e010 ) )
+#define __portNVIC_SYSTICK_LOAD_REG		( * ( ( volatile uint32_t * ) 0xe000e014 ) )
+#define portNVIC_SYSTICK_CLK_BIT			( 1UL << 2UL )
+#define portNVIC_SYSTICK_INT_BIT			( 1UL << 1UL )
+#define portNVIC_SYSTICK_ENABLE_BIT			( 1UL << 0UL )
+
+#define RCC_PLLN_MASK    ((uint32_t)0x00007F00)
+#define RCC_PLLN_POS     8
+#define RCC_PLLR_MASK    ((uint32_t)0x06000000)
+#define RCC_PLLR_POS     25
+
+#define THIS_CPU 0 			// Current cpu number
+#define TASK_CNT 24 			// Number of tasks
+#define MSG_CNT 22 			// Number of system messages
+#define HYPERPERIOD 276 		// Number of system hyperperiod slots
+#define ONE_TICK ( ( configCPU_CLOCK_HZ / configTICK_RATE_HZ ) - 1UL )
+
+
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
+#include "stm32l4xx_hal.h"
 
 #ifdef CMSISOS
 #include "cmsis_os.h"
@@ -50,20 +82,6 @@
 #endif
 
 
-/* USER CODE BEGIN Includes */
-#define 	LED_GREEN_GPIO_Port GPIOE
-#define 	LED_RED_GPIO_Port   GPIOB
-#define		LED_GREEN						GPIO_PIN_8
-#define		LED_RED	 						GPIO_PIN_2
-#define		LED_GREEN_ON()			HAL_GPIO_WritePin(GPIOE, GPIO_PIN_8, GPIO_PIN_SET)
-#define		LED_RED_ON()				HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, GPIO_PIN_SET)
-#define		LED_GREEN_OFF()			HAL_GPIO_WritePin(GPIOE, GPIO_PIN_8, GPIO_PIN_RESET)
-#define		LED_RED_OFF()				HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, GPIO_PIN_RESET)
-#define		LED_GREEN_TOGGLE()	HAL_GPIO_TogglePin(GPIOE, GPIO_PIN_8)
-#define		LED_RED_TOGGLE()		HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_2)
-
-#define		BUTTON_PRESSED		1
-/* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
 CAN_HandleTypeDef hcan1;
@@ -82,20 +100,74 @@ SPI_HandleTypeDef hspi2;
 
 UART_HandleTypeDef huart2;
 
+RCC_OscInitTypeDef RCC_OscInitStruct;
+
 #ifdef CMSISOS
 osThreadId defaultTaskHandle;
 osThreadId myTask02Handle;
 osMessageQId myQueue01Handle;
 #endif
 
-/* USER CODE BEGIN PV */
-/* Private variables ---------------------------------------------------------*/
-enum SysFreq{F_025, F_050, F_075, F_100};
-/* USER CODE END PV */
+uint32_t current_freq = 100;
+uint32_t frq = 25;
+
+//enum SysFreq{F_025, F_050, F_075, F_100};
+//SysFreq current_freq = F_100;
+
+const char periods[TASK_CNT] = {46,46,46,46,92,92,92,92,92,92,138,138,138,138,
+                                138,138,138,138,138,138,138,138,138,138};
+
+// Tasks execution time
+const char wcets[TASK_CNT] = {9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9};
+
+// Precedences {Tx,Rx}
+const char msgs[MSG_CNT][2] = { {0,1},{2,3},{4,5},{6,7},{6,8},{7,9},{8,9},{10,11},
+                                {11,12},{11,13},{12,14},{13,14},{14,15},{16,17},{16,18},
+                                {17,19},{18,19},{19,20},{20,21},{20,22},{21,23},{22,23}};
+				
+// Jobs and power level asignation to each cpu (calculated with the optimizer)
+const int job_cpu[TASK_CNT][6] = {{3,3,3,3,2,0}, {3,3,1,2,3,2}, {1,3,3,1,0,2}, {3,0,2,3,3,0},
+                                  {1,0,2,-1,-1,-1}, {2,1,2,-1,-1,-1}, {0,1,0,-1,-1,-1},
+                                  {1,3,1,-1,-1,-1}, {1,0,0,-1,-1,-1}, {1,2,0,-1,-1,-1},
+                                  {0,0,-1,-1,-1,-1}, {2,3,-1,-1,-1,-1}, {2,0,-1,-1,-1,-1},
+                                  {1,1,-1,-1,-1,-1}, {2,0,-1,-1,-1,-1}, {3,3,-1,-1,-1,-1},
+                                  {2,3,-1,-1,-1,-1}, {2,3,-1,-1,-1,-1}, {0,3,-1,-1,-1,-1},
+                                  {2,3,-1,-1,-1,-1}, {2,0,-1,-1,-1,-1}, {3,0,-1,-1,-1,-1},
+                                  {2,1,-1,-1,-1,-1}, {0,3,-1,-1,-1,-1}};
+				  
+const int job_freq[TASK_CNT][6] = {{050,075,100,100,100,050},
+                                       {100,075,050,050,100,050},
+                                       {050,100,100,075,100,100},
+                                       {050,100,075,075,100,050},
+                                       {050,050,025,100,100,100},
+                                       {075,025,050,100,100,100},
+                                       {050,075,075,100,100,100},
+                                       {100,100,025,100,100,100},
+                                       {100,100,100,100,100,100},
+                                       {050,025,100,100,100,100},
+                                       {050,075,100,100,100,100},
+                                       {100,100,100,100,100,100},
+                                       {050,100,100,100,100,100},
+                                       {050,075,100,100,100,100},
+                                       {100,100,100,100,100,100},
+                                       {050,100,100,100,100,100},
+                                       {100,025,100,100,100,100},
+                                       {100,100,100,100,100,100},
+                                       {025,050,100,100,100,100},
+                                       {050,100,100,100,100,100},
+                                       {050,075,100,100,100,100},
+                                       {075,050,100,100,100,100},
+                                       {075,025,100,100,100,100},
+                                       {050,100,100,100,100,100}};
+				       
+int job_cnt[TASK_CNT]; 			// Number of instances for each task
+
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 void Error_Handler(uint8_t);
+void vUtilsEatCpu( UBaseType_t ticks );
+void vApplicationTickHook(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_I2C2_Init(void);
@@ -110,26 +182,20 @@ static void MX_CAN1_Init(void);
 void StartDefaultTask(void const * argument);
 void StartTask02(void const * argument);
 #else
-static void Task_Body( void* pvParams );
+static void TEST_CAN( void* pvParams );
+//static void Task_Body( void* pvParams );
+//static void Task_Body1( void* pvParams );
+//static void Task_Body2( void* pvParams );
+//static void Task_Body3( void* pvParams );
 #endif
 
-/* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
 HAL_StatusTypeDef ALE_CAN_Receive_IT(CAN_HandleTypeDef *hcan, uint8_t FIFONumber);
 HAL_StatusTypeDef CAN_Polling(void);
-/* USER CODE END PFP */
 
-/* USER CODE BEGIN 0 */
-
-/* USER CODE END 0 */
 
 int main(void)
 {
-
-  /* USER CODE BEGIN 1 */
-
-  /* USER CODE END 1 */
-
   /* MCU Configuration----------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
@@ -142,31 +208,23 @@ int main(void)
   MX_GPIO_Init();
   MX_I2C1_Init();
   MX_I2C2_Init();
-  MX_LCD_Init();
+  //MX_LCD_Init();
+  HAL_RCC_MCOConfig(RCC_MCO1, RCC_MCO1SOURCE_SYSCLK, RCC_MCODIV_1);  // Put on MCO pin the: System clock selected
   MX_QUADSPI_Init();
   MX_SAI1_Init();
   MX_SPI2_Init();
   MX_USART2_UART_Init();
   MX_CAN1_Init();
 
-  /* USER CODE BEGIN 2 */
 
-  /* USER CODE END 2 */
 
-  /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
-  /* USER CODE END RTOS_MUTEX */
 
-  /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* add semaphores, ... */
-  /* USER CODE END RTOS_SEMAPHORES */
 
-  /* USER CODE BEGIN RTOS_TIMERS */
   /* start timers, add new ones, ... */
-  /* USER CODE END RTOS_TIMERS */
 
-  /* Create the thread(s) */
-  /* definition and creation of defaultTask */
+  /* Thread creation -------------------------------------------------------------*/
 #ifdef CMSISOS
   osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
@@ -175,24 +233,21 @@ int main(void)
   osThreadDef(myTask02, StartTask02, osPriorityIdle, 0, 128);
   myTask02Handle = osThreadCreate(osThread(myTask02), NULL);
 #else
-  xTaskCreate( Task_Body, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
+xTaskCreate( TEST_CAN, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
+//  xTaskCreate( Task_Body, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
+//  xTaskCreate( Task_Body1, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
+//  xTaskCreate( Task_Body2, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
+//  xTaskCreate( Task_Body3, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
 #endif
-  /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
-  /* USER CODE END RTOS_THREADS */
 
-  /* Create the queue(s) */
-  /* definition and creation of myQueue01 */
-
+  /* Queues creation -------------------------------------------------------------*/
  #ifdef CMSISOS
+   /* definition and creation of myQueue01 */
   osMessageQDef(myQueue01, 16, uint16_t);
   myQueue01Handle = osMessageCreate(osMessageQ(myQueue01), NULL);
 #else
-  // Configurar Cola!! 
+  // Configurar Colas!! 
 #endif
-  /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
-  /* USER CODE END RTOS_QUEUES */
  
 
   /* Start scheduler */
@@ -201,21 +256,14 @@ int main(void)
 #else
   vTaskStartScheduler();
 #endif
-  
-  
+    
   /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
+
   while (1)
   {
-  /* USER CODE END WHILE */
-
-  /* USER CODE BEGIN 3 */
-
   }
-  /* USER CODE END 3 */
-
 }
 
 /** System Clock Configuration
@@ -338,6 +386,7 @@ static void MX_CAN1_Init(void)
   // See RM0351 - pag. 1474
   //	BaudRate = 1 / NominalBitTime
   //	NominalBitTime = tq + tBS1 + tBS2
+
   //	tBS1 = tq x ( TS1[3:0] + 1 )
   //	tBS2 = tq x ( TS2[2:0] + 1 )
   //	tq = ( BRP[9:0] + 1 ) x tPCLK
@@ -371,7 +420,28 @@ static void MX_CAN1_Init(void)
 //  	  	  total_of_tq = CAN_SJW + CAN_BS1 + CAN_BS2 = 20
 //  	  	  sampling = (( CAN_SJW + CAN_BS1 ) / ( CAN_SJW + CAN_BS1 + CAN_BS2 )) = 0.85
 //	Prescaler = PCLK1 / ( BaudRate * total_of_tq ) = ( 40,000,000 / 20 ) / 1,000,000 = 2
+//	Prescaler = PCLK1 / ( BaudRate * total_of_tq ) = ( 20,000,000 / 20 ) / 1,000,000 = 1
 
+// Actualization
+//  To vary the sysclk frequency without affect the Baudrate, we must change the prescaler of
+//   PCLK1 to keep it at 10,000,000 for 25, 50 and 100% power schemes.
+
+//   total_of_tq = PCLK1 / (  BaudRate * Prescaler )
+//    for PCLK1 = 10,000,000  ;  Baudrate = 1,000,000  ; Prescaler = 1  yields  total_of_tq = 10
+//
+//  Using CAN_SJW = 1TQ , CAN_BS1 = 7TQ , CAN_BS2 = 2TQ result:
+//  	  	  total_of_tq = CAN_SJW + CAN_BS1 + CAN_BS2 = 10
+//  	  	  sampling = (( CAN_SJW + CAN_BS1 ) / ( CAN_SJW + CAN_BS1 + CAN_BS2 )) = 0.8
+
+//  The same strategy can be used to 75% power scheme, but we need to change the PCLK1 frequency
+//   to 15,000,000, which yields
+
+//   total_of_tq = PCLK1 / (  BaudRate * Prescaler )
+//    for PCLK1 = 15,000,000  ; Baudrate = 1,000,000 ; Prescaler = 1  yields  total_of_tq = 15
+//
+//  Using CAN_SJW = 1TQ , CAN_BS1 = 11TQ , CAN_BS2 = 3TQ result:
+//  	  	  total_of_tq = CAN_SJW + CAN_BS1 + CAN_BS2 = 15
+//  	  	  sampling = (( CAN_SJW + CAN_BS1 ) / ( CAN_SJW + CAN_BS1 + CAN_BS2 )) = 0.8
 
   hcan1.Init.SJW = CAN_SJW_1TQ;
   hcan1.Init.BS1 = CAN_BS1_16TQ;
@@ -729,7 +799,11 @@ static void MX_GPIO_Init(void)
 
 }
 
-/* USER CODE BEGIN 4 */
+/**
+  * @brief  Transmits and Receives a correct CAN frame by polling
+  * @param  None
+  * @retval HAL status
+  */
 HAL_StatusTypeDef CAN_Polling(void)
 {
 
@@ -786,7 +860,12 @@ HAL_StatusTypeDef CAN_Polling(void)
 
 }
 
-// CAN Rx complete callback
+/**
+  * @brief  CAN Rx complete callback
+  * @param  hcan:       Pointer to a CAN_HandleTypeDef structure that contains
+  *         the configuration information for the specified CAN.
+  * @retval None
+  */
 void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef* hcan)
 {
   if ((hcan->pRxMsg->StdId == 0x11)&&(hcan->pRxMsg->IDE == CAN_ID_STD) && (hcan->pRxMsg->DLC == 2))
@@ -820,8 +899,6 @@ void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef* hcan)
 // 		HAL_Delay(50);
 //
 //  	}
-
-
 
 
 // Rearm the receive interrupt
@@ -890,36 +967,31 @@ HAL_StatusTypeDef ALE_CAN_Receive_IT(CAN_HandleTypeDef* hcan, uint8_t FIFONumber
   return HAL_OK;
 }
 
-/* USER CODE END 4 */
 
 #ifdef CMSISOS
 /* StartDefaultTask function */
 void StartDefaultTask(void const * argument)
 {
-
-  /* USER CODE BEGIN 5 */
   /* Infinite loop */
   for(;;)
   {
     HAL_GPIO_TogglePin(LD_G_GPIO_Port, LD_G_Pin);
     osDelay(100);
   }
-  /* USER CODE END 5 */ 
 }
 
 /* StartTask02 function */
 void StartTask02(void const * argument)
 {
-  /* USER CODE BEGIN StartTask02 */
   /* Infinite loop */
   for(;;)
   {
     osDelay(1);
   }
-  /* USER CODE END StartTask02 */
 }
 #else
-static void Task_Body( void* pvParams )
+
+static void TEST_CAN( void* pvParams )
 {
 	/* A pointer to the subject task's name, which is a standard NULL terminated
 	 * C string. */
@@ -977,7 +1049,295 @@ static void Task_Body( void* pvParams )
 	/* If the tasks ever leaves the for cycle, kill it. */
 	vTaskDelete( NULL );
 }
+
+static void TEST_LedSwitch1( void* pvParams )
+{
+	/* A pointer to the subject task's name, which is a standard NULL terminated
+	 * C string. */
+	portTickType xLastWakeTime = xTaskGetTickCount();
+	const portTickType taskPeriod = (portTickType) 110;
+
+	for (;;)
+	{
+//		sprintf( "%s -- %d\n\r", pcTaskName, xTaskGetTickCount() );
+		//HAL_GPIO_TogglePin(LED_GREEN_GPIO_Port, LED_GREEN);
+		LED_GREEN_ON();
+		LED_RED_OFF();
+
+		vTaskDelayUntil(&xLastWakeTime, taskPeriod);
+		//vTaskDelay(1000);
+	}
+
+	/* If the tasks ever leaves the for cycle, kill it. */
+	vTaskDelete( NULL );
+}
+
+static void TEST_LedSwitch2( void* pvParams )
+{
+	/* A pointer to the subject task's name, which is a standard NULL terminated
+	 * C string. */
+	portTickType xLastWakeTime = xTaskGetTickCount();
+	const portTickType taskPeriod = (portTickType) 120;
+
+	for (;;)
+	{
+//		sprintf( "%s -- %d\n\r", pcTaskName, xTaskGetTickCount() );
+		//HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_2);
+		LED_GREEN_OFF();
+		LED_RED_ON();
+
+		vTaskDelayUntil(&xLastWakeTime, taskPeriod);
+		//vTaskDelay(1000);
+	}
+
+	/* If the tasks ever leaves the for cycle, kill it. */
+	vTaskDelete( NULL );
+}
+
+
+static void TEST_FreqSwitch( void* pvParams )
+{
+	/* A pointer to the subject task's name, which is a standard NULL terminated
+	 * C string. */
+	portTickType xLastWakeTime = xTaskGetTickCount();
+
+	for (;;)
+	{
+		LED_GREEN_ON();
+		//HAL_GPIO_TogglePin(LED_GREEN_GPIO_Port, LED_GREEN);
+		//HAL_GPIO_TogglePin(LED_RED_GPIO_Port, LED_RED);
+		LED_RED_ON();
+		//sprintf( "%s -- %d\n\r", pcTaskName, xTaskGetTickCount() );
+		vTaskDelayUntil(&xLastWakeTime,450);
+		frq = frq == 25? 75 : 25;
+	}
+
+	/* If the tasks ever leaves the for cycle, kill it. */
+	vTaskDelete( NULL );
+}
+
+void TEST_GenericFunc( void* params)
+// Tarea generica (el numero de tarea se pasa como argumento)
+{
+  TickType_t xPreviousWakeTime = xTaskGetTickCount();
+
+  unsigned char this_task = *((unsigned char*) params); // Numero de la tarea actual
+  int this_job = -1; // Contador de instancias. Inicializa en -1 porque se incrementa al principio
+
+  for(;;)
+  {
+    // Incrementar numero de instancia (sin sobrepasar el numero maximo de instancias para esta tarea)
+    this_job = (this_job == job_cnt[this_task]-1) ? 0 : this_job + 1;
+
+    // Si esta instancia esta asignada a este cpu, ejecutar, si no, saltear
+    if( job_cpu[this_task][this_job] == THIS_CPU )
+    {
+      // Configurar frecuencia de esta instancia de acuerdo a lo calculado
+      //vSetSystemFreq( job_freq[this_task][this_job] ); // La funcion verifica si es la misma frecuecia que la actual
+
+      // Comer cpu (simula el tiempo consumido por esta tarea), multiplicando el tiempo de ejecucion
+      // dependiendo de la frecuencia de operacion del sistema
+      vUtilsEatCpu( (TickType_t) ((double) wcets[this_task]) );
+    }
+
+    vTaskDelayUntil( &xPreviousWakeTime, (TickType_t) periods[this_task] );
+  }
+
+  vTaskDelete( NULL );
+}
+
+
+
+
+
+
 #endif
+
+void vUtilsEatCpu( UBaseType_t ticks )
+{
+	BaseType_t xI;
+
+    //BaseType_t xLim = ( ticks * ONE_TICK ) / 5;
+	BaseType_t xLim = ( ticks * ONE_TICK ) / 100;
+
+	for( xI = 0; xI < xLim; xI++ )
+	{
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+	}
+}
+
+
+void vApplicationTickHook(void)
+{
+	/* Configure the main PLL clock source, multiplication and division factors. */
+
+	//uint32_t frq = 25;
+
+
+  if( current_freq != frq ) // Cambiar solo si hace falta
+  {
+	  uint32_t PLLNset = 20;
+	  uint32_t PLLRset = 0;
+    switch(frq)
+    {
+    case 25:
+    	PLLNset = 20;
+		PLLRset = 3; // 10MHz
+		break;
+    case 50:
+    	PLLNset = 20;
+    	PLLRset = 1; // 20MHz
+		break;
+    case 75:
+    	PLLNset = 30;
+    	PLLRset = 1; // 30MHz
+		break;
+    case 100:
+    	PLLNset = 20;
+    	PLLRset = 0; // 40MHz
+		break;
+    default: PLLNset = 20;
+		PLLRset = 0; // 20MHz
+    }
+
+    /* Enable HSI clock */
+    	RCC->CR |= RCC_CR_HSION;
+
+    	/* Wait till HSI is ready */
+    	while (!(RCC->CR & RCC_CR_HSIRDY));
+
+    	/* Select HSI clock as main clock */
+    	RCC->CFGR = (RCC->CFGR & ~(RCC_CFGR_SW)) | RCC_CFGR_SW_HSI;
+
+    	/* Disable PLL */
+    	RCC->CR &= ~RCC_CR_PLLON;
+
+    	/* Set PLL settings */
+    	RCC->PLLCFGR = (RCC->PLLCFGR & ~RCC_PLLN_MASK) | ((PLLNset << RCC_PLLN_POS) & RCC_PLLN_MASK);
+    	RCC->PLLCFGR = (RCC->PLLCFGR & ~RCC_PLLR_MASK) | ((PLLRset << RCC_PLLR_POS) & RCC_PLLR_MASK);
+
+    	/* Enable PLL */
+    	RCC->CR |= RCC_CR_PLLON;
+    	RCC->PLLCFGR |= RCC_PLLCFGR_PLLREN;
+
+    	/* Wait till PLL is ready */
+    	while (!(RCC->CR & RCC_CR_PLLRDY));
+
+    	/* Enable PLL as main clock */
+    	RCC->CFGR = (RCC->CFGR & ~(RCC_CFGR_SW)) | RCC_CFGR_SW_PLL;
+
+    	/* Disable HSI clock */
+    	RCC->CR &= ~RCC_CR_HSION;
+
+    	/* Update system core clock variable */
+    	SystemCoreClockUpdate();
+
+    // Ajustar duracion del tick
+    __portNVIC_SYSTICK_LOAD_REG = ( configCPU_CLOCK_HZ / configTICK_RATE_HZ ) - 1UL;
+	__portNVIC_SYSTICK_CTRL_REG = ( portNVIC_SYSTICK_CLK_BIT | portNVIC_SYSTICK_INT_BIT | portNVIC_SYSTICK_ENABLE_BIT );
+
+	current_freq = frq; // Actualizar frecuencia actual
+  	}
+}
 
 
 /**
@@ -990,15 +1350,9 @@ static void Task_Body( void* pvParams )
   */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-/* USER CODE BEGIN Callback 0 */
-
-/* USER CODE END Callback 0 */
   if (htim->Instance == TIM4) {
     HAL_IncTick();
   }
-/* USER CODE BEGIN Callback 1 */
-
-/* USER CODE END Callback 1 */
 }
 
 /**
@@ -1010,8 +1364,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 void Error_Handler(uint8_t nerror)
 {
 	uint8_t i;
-  /* USER CODE BEGIN Error_Handler */
-  /* User can add his own implementation to report the HAL error return state */
 	LED_RED_OFF();
   while(1) 
   {
@@ -1023,7 +1375,6 @@ void Error_Handler(uint8_t nerror)
 			HAL_Delay(500);
 		}
 		HAL_Delay(1500);
-  /* USER CODE END Error_Handler */
   }
 
 }
@@ -1039,10 +1390,8 @@ void Error_Handler(uint8_t nerror)
    */
 void assert_failed(uint8_t* file, uint32_t line)
 {
-  /* USER CODE BEGIN 6 */
   /* User can add his own implementation to report the file name and line number,
     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-  /* USER CODE END 6 */
 
 }
 
@@ -1056,4 +1405,4 @@ void assert_failed(uint8_t* file, uint32_t line)
   * @}
 */ 
 
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+/******************* Copyright (c) 2016 Alejandro Borghero *****END OF FILE****/
