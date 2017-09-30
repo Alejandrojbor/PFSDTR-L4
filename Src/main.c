@@ -28,6 +28,12 @@
   * 			Verify the can TxMessage and RxMessage  to the handler (hcan)
   * 			Program Queues for tasks
   *
+  * RX_CAN -> PA11 -> R67 -> Blanco
+	* TX_CAN -> PA12 -> R68 -> Azul
+	*
+	* RX_CAN -> PA11 -> R67 -> Blanco
+	* TX_CAN -> PA12 -> R68 -> Verde
+  *
   */
 
 /* Includes ------------------------------------------------------------------*/
@@ -319,8 +325,8 @@ static void MX_CAN1_Init(void)
   //	tq = ( BRP[9:0] + 1 ) x tPCLK
 
 
-//  hcan1.Init.Mode = CAN_MODE_NORMAL;
-  hcan1.Init.Mode = CAN_MODE_LOOPBACK;		// Loopback mode, restore NORMAL mode at the end of the test
+  hcan1.Init.Mode = CAN_MODE_NORMAL;
+//  hcan1.Init.Mode = CAN_MODE_LOOPBACK;		// Loopback mode, restore NORMAL mode at the end of the test
 
 
   //  Prescaler  =  PCLK1 / ( BaudRate * total_of_tq )
@@ -797,21 +803,25 @@ void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef* hcan)
 {
   if ((hcan->pRxMsg->StdId == 0x11)&&(hcan->pRxMsg->IDE == CAN_ID_STD) && (hcan->pRxMsg->DLC == 2))
   {
-  	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_RESET);
+//  	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_RESET);
     switch(hcan->pRxMsg->Data[0])
     {
     /* Shutdown leds */
     case 0:
-    	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_RESET);
+    	HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED, GPIO_PIN_RESET);
+    	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_SET);
     	break;
     case 1:
+    	HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED, GPIO_PIN_SET);
     	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_SET);
     	break;
     case 2:
-    	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_SET);
+    	HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED, GPIO_PIN_SET);
+    	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_RESET);
     	break;
     case 3:
-    	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_SET);
+    	HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED, GPIO_PIN_RESET);
+    	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_RESET);
     	break;
     case 4:
     	break;
@@ -918,7 +928,7 @@ static void TEST_CAN( void* pvParams )
 //		sprintf( "%s -- %d\n\r", pcTaskName, xTaskGetTickCount() );
 
 		// The led flashes to show that the systems is working
-		HAL_GPIO_TogglePin(LED_GREEN_GPIO_Port, LED_GREEN);
+//		HAL_GPIO_TogglePin(LED_GREEN_GPIO_Port, LED_GREEN);
 
 /*
 // 		Transmission and reception in Loopback mode (Polling)
@@ -932,7 +942,7 @@ static void TEST_CAN( void* pvParams )
 		{
 			idx%=3;
 			// Set the data to be transmitted
-			hcan1.pTxMsg->Data[0] = ++idx;
+			hcan1.pTxMsg->Data[0] = idx++;
 			hcan1.pTxMsg->Data[1] = 0xAD;
 
 //			HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_SET);
