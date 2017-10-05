@@ -51,6 +51,7 @@
 
 /* Private define ------------------------------------------------------------*/
 
+
 #define SAI1_MCK_Pin GPIO_PIN_2
 #define SAI1_MCK_GPIO_Port GPIOE
 #define AUDIO_RST_Pin GPIO_PIN_3
@@ -214,11 +215,13 @@
 #define RCC_PLLR_MASK    ((uint32_t)0x06000000)
 #define RCC_PLLR_POS     25
 
-#define THIS_CPU 0 			// Current cpu number
-#define TASK_CNT 24 			// Number of tasks
-#define MSG_CNT 22 			// Number of system messages
-#define HYPERPERIOD 276 		// Number of system hyperperiod slots
-#define ONE_TICK ( ( configCPU_CLOCK_HZ / configTICK_RATE_HZ ) - 1UL )
+#define THIS_CPU			0 		// Current cpu number
+#define CPU_CNT				2		// Number of CPUs
+#define TASK_CNT			5 		// Number of tasks
+#define MSG_CNT 			3 		// Number of system messages
+#define HYPERPERIOD 			30 		// Number of system hyperperiod slots
+#define ONE_TICK 			( ( configCPU_CLOCK_HZ / configTICK_RATE_HZ ) - 1UL )
+
 
 /* USER CODE END Private defines */
 

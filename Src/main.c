@@ -27,6 +27,16 @@
   * TODO:
   * 			Verify the can TxMessage and RxMessage  to the handler (hcan)
   * 			Program Queues for tasks
+  * 			Verificar si el TickHook se llama antes o despues del incremento del TickCount y ajustar xTick
+  * 			Verificar demoras de conmutación de frecuencia:
+  * 				1- Demora en conmutación del core clock (puede usarse MCO para medirlo)
+  * 				2- Demora en conmutación del timer4 (FreeRTOS tick)
+  *
+  *
+  *
+  ******************************************************************************
+  *
+  * Conexionado bus CAN en microUSB
   *
   * RX_CAN -> PA11 -> R67 -> Blanco
 	* TX_CAN -> PA12 -> R68 -> Azul
@@ -43,6 +53,7 @@
 #include "task.h"
 #include "queue.h"
 
+#define CPU_CNT             // Corregir error de compilacion cuando se define en main.h
 /* Private variables ---------------------------------------------------------*/
 CAN_HandleTypeDef hcan1;
 
@@ -68,53 +79,33 @@ uint32_t frq = 25;
 //enum SysFreq{F_025, F_050, F_075, F_100};
 //SysFreq current_freq = F_100;
 
-const char periods[TASK_CNT] = {46,46,46,46,92,92,92,92,92,92,138,138,138,138,
-                                138,138,138,138,138,138,138,138,138,138};
+const char periods[TASK_CNT] = {10,10,15,15,15};
 
 // Tasks execution time
-const char wcets[TASK_CNT] = {9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9};
+const char wcets[TASK_CNT] = {2,2,3,3,3};
 
 // Precedences {Tx,Rx}
-const char msgs[MSG_CNT][2] = { {0,1},{2,3},{4,5},{6,7},{6,8},{7,9},{8,9},{10,11},
-                                {11,12},{11,13},{12,14},{13,14},{14,15},{16,17},{16,18},
-                                {17,19},{18,19},{19,20},{20,21},{20,22},{21,23},{22,23}};
+const char msgs[MSG_CNT][2] = { {1,2},{3,4},{3,5}};
 				
 // Jobs and power level asignation to each cpu (calculated with the optimizer)
-const int job_cpu[TASK_CNT][6] = {{3,3,3,3,2,0}, {3,3,1,2,3,2}, {1,3,3,1,0,2}, {3,0,2,3,3,0},
-                                  {1,0,2,-1,-1,-1}, {2,1,2,-1,-1,-1}, {0,1,0,-1,-1,-1},
-                                  {1,3,1,-1,-1,-1}, {1,0,0,-1,-1,-1}, {1,2,0,-1,-1,-1},
-                                  {0,0,-1,-1,-1,-1}, {2,3,-1,-1,-1,-1}, {2,0,-1,-1,-1,-1},
-                                  {1,1,-1,-1,-1,-1}, {2,0,-1,-1,-1,-1}, {3,3,-1,-1,-1,-1},
-                                  {2,3,-1,-1,-1,-1}, {2,3,-1,-1,-1,-1}, {0,3,-1,-1,-1,-1},
-                                  {2,3,-1,-1,-1,-1}, {2,0,-1,-1,-1,-1}, {3,0,-1,-1,-1,-1},
-                                  {2,1,-1,-1,-1,-1}, {0,3,-1,-1,-1,-1}};
+const int job_cpu[TASK_CNT][6] = {{1,2,2}, {1,2,2}, {2,1,0}, {2,2,0},{1,1,0}};
 				  
-const int job_freq[TASK_CNT][6] = {{050,075,100,100,100,050},
-                                       {100,075,050,050,100,050},
-                                       {050,100,100,075,100,100},
-                                       {050,100,075,075,100,050},
-                                       {050,050,025,100,100,100},
-                                       {075,025,050,100,100,100},
-                                       {050,075,075,100,100,100},
-                                       {100,100,025,100,100,100},
-                                       {100,100,100,100,100,100},
-                                       {050,025,100,100,100,100},
-                                       {050,075,100,100,100,100},
-                                       {100,100,100,100,100,100},
-                                       {050,100,100,100,100,100},
-                                       {050,075,100,100,100,100},
-                                       {100,100,100,100,100,100},
-                                       {050,100,100,100,100,100},
-                                       {100,025,100,100,100,100},
-                                       {100,100,100,100,100,100},
-                                       {025,050,100,100,100,100},
-                                       {050,100,100,100,100,100},
-                                       {050,075,100,100,100,100},
-                                       {075,050,100,100,100,100},
-                                       {075,025,100,100,100,100},
-                                       {050,100,100,100,100,100}};
+const int job_freq[TASK_CNT][6] = {    {050,050,050},
+                                       {025,050,100},
+                                       {050,050,000},
+                                       {100,100,000},
+                                       {100,050,000},
+                                  };
 				       
 int job_cnt[TASK_CNT]; 			// Number of instances for each task
+
+const char plan[ CPU_CNT ][HYPERPERIOD] = {{1,1,1,1,2,2,2,2,2,2,2,2,5,5,5,3,3,3,3,3,3,5,5,5,5,5,5,0,0,0},
+																				 {3,3,3,3,3,3,4,4,4,0,1,1,1,1,2,2,2,2,0,0,1,1,1,1,2,2,4,4,4,0}};
+
+const char plan_freq[ CPU_CNT ][HYPERPERIOD] = {{50,50,50,50,25,25,25,25,25,25,25,25,100,100,100,50,50,50,50,50,50,50,50,50,50,50,50,0,0,0},
+		 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	{50,50,50,50,50,50,100,100,100,0,50,50,50,50,50,50,50,50,0,0,50,50,50,50,100,100,100,100,100,0}};
+
+TaskHandle_t xHandles[TASK_CNT];
 
 
 /* Private function prototypes -----------------------------------------------*/
@@ -133,6 +124,7 @@ static void MX_USART2_UART_Init(void);
 static void MX_CAN1_Init(void);
 
 static void TEST_CAN( void* pvParams );
+void TEST_GenericFuncV2( void* params);
 //static void Task_Body( void* pvParams );
 //static void Task_Body1( void* pvParams );
 //static void Task_Body2( void* pvParams );
@@ -175,11 +167,15 @@ int main(void)
   /* start timers, add new ones, ... */
 
   /* Thread creation -------------------------------------------------------------*/
-xTaskCreate( TEST_CAN, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
-//  xTaskCreate( Task_Body, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
-//  xTaskCreate( Task_Body1, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
-//  xTaskCreate( Task_Body2, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
-//  xTaskCreate( Task_Body3, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
+  //Task definition example for vTaskSuspend and vTaskResume
+  //  xTaskCreate( Task_Body, "TaskName", 128, NULL, configMAX_PRIORITIES-1, xHandles[TASK_CNT] );
+for (uint8_t tasknum=1; tasknum <= TASK_CNT; ++tasknum)
+	xTaskCreate( TEST_GenericFuncV2, NULL, 128, (void *)(tasknum), configMAX_PRIORITIES-1, xHandles[tasknum] );
+	//  xTaskCreate( Task_Body, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
+	//  xTaskCreate( Task_Body1, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
+	//  xTaskCreate( Task_Body2, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
+	//  xTaskCreate( Task_Body3, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
+
 
 
   /* Queues creation -------------------------------------------------------------*/
@@ -355,7 +351,7 @@ static void MX_CAN1_Init(void)
 //	Prescaler = PCLK1 / ( BaudRate * total_of_tq ) = ( 40,000,000 / 20 ) / 1,000,000 = 2
 //	Prescaler = PCLK1 / ( BaudRate * total_of_tq ) = ( 20,000,000 / 20 ) / 1,000,000 = 1
 
-// Actualization
+// Update
 //  To vary the sysclk frequency without affect the Baudrate, we must change the prescaler of
 //   PCLK1 to keep it at 10,000,000 for 25, 50 and 100% power schemes.
 
@@ -1029,6 +1025,26 @@ static void TEST_FreqSwitch( void* pvParams )
 	/* If the tasks ever leaves the for cycle, kill it. */
 	vTaskDelete( NULL );
 }
+void TEST_GenericFuncV2( void* params)
+// Generic task (The task number is passed as "params" argument )
+{
+
+  // Actual task number
+  unsigned char this_task = *((unsigned char*) params);
+  // Instance counter. It begins in -1 because the initial incremnte
+  int this_job = -1;
+
+  for(;;)
+  {
+    // Simulate the work doing by the the task
+    vUtilsEatCpu( (TickType_t) ((double) wcets[this_task]) );
+
+    vTaskSuspend( NULL );
+  }
+
+  vTaskDelete( NULL );
+}
+
 
 void TEST_GenericFunc( void* params)
 // Tarea generica (el numero de tarea se pasa como argumento)
@@ -1066,109 +1082,10 @@ void vUtilsEatCpu( UBaseType_t ticks )
 	BaseType_t xI;
 
     //BaseType_t xLim = ( ticks * ONE_TICK ) / 5;
-	BaseType_t xLim = ( ticks * ONE_TICK ) / 100;
+	BaseType_t xLim = ( ticks * ONE_TICK ); // 100;
 
 	for( xI = 0; xI < xLim; xI++ )
 	{
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
-		asm("nop");
 		asm("nop");
 	}
 }
@@ -1178,73 +1095,75 @@ void vApplicationTickHook(void)
 {
 	/* Configure the main PLL clock source, multiplication and division factors. */
 
-	//uint32_t frq = 25;
+	TickType_t xTick;
+	uint32_t PLLRDiv = 0;
+  uint32_t AHBDiv = RCC_SYSCLK_DIV4;
 
+/* There are two possibilities for task suspend.
+ * The first one is suspend the task suspends itself:
+ * vTaskSuspend( NULL );
+ * The other one is another task (i.e. TickHook) suspends the task as:
+ * vTaskSuspend( xHandle );
+ */
+	xTick = xTaskGetTickCountFromISR() % HYPERPERIOD;
+	// Verificar si el TickHook se llama antes o despues del incremento del TickCount y ajustar xTick
+	if ( plan[THIS_CPU][xTick] != plan[THIS_CPU][ (xTick+1) % HYPERPERIOD ] )
+	{
+		vTaskResume( xHandles[ (uint8_t)(plan[xTick+1][THIS_CPU]) ] );
+		if ( plan_freq[THIS_CPU][xTick] != plan_freq[THIS_CPU][ (xTick+1) % HYPERPERIOD ] )
+		{
+			switch( plan_freq[THIS_CPU][(xTick+1) % HYPERPERIOD] )
+			{
+			case 25:						// 10MHz
+				PLLRDiv = 3;
+				AHBDiv = RCC_SYSCLK_DIV1;
+				break;
+			case 50:						// 20MHz
+				PLLRDiv = 1;
+				AHBDiv = RCC_SYSCLK_DIV2;
+				break;
+			case 100:						// 40MHz
+				PLLRDiv = 0;
+				AHBDiv = RCC_SYSCLK_DIV4;
+				break;
+			default: 						// 40MHz
+				PLLRDiv = 0;
+				AHBDiv = RCC_SYSCLK_DIV4;
+			}
 
-  if( current_freq != frq ) // Cambiar solo si hace falta
-  {
-	  uint32_t PLLNset = 20;
-	  uint32_t PLLRset = 0;
-    switch(frq)
-    {
-    case 25:
-    	PLLNset = 20;
-		PLLRset = 3; // 10MHz
-		break;
-    case 50:
-    	PLLNset = 20;
-    	PLLRset = 1; // 20MHz
-		break;
-    case 75:
-    	PLLNset = 30;
-    	PLLRset = 1; // 30MHz
-		break;
-    case 100:
-    	PLLNset = 20;
-    	PLLRset = 0; // 40MHz
-		break;
-    default: PLLNset = 20;
-		PLLRset = 0; // 20MHz
-    }
+			/* Enable HSI clock */
+			RCC->CR |= RCC_CR_HSION;
 
-    /* Enable HSI clock */
-    	RCC->CR |= RCC_CR_HSION;
+			/* Wait till HSI is ready */
+			while (!(RCC->CR & RCC_CR_HSIRDY));
 
-    	/* Wait till HSI is ready */
-    	while (!(RCC->CR & RCC_CR_HSIRDY));
+			/* Select HSI clock as main clock */
+			RCC->CFGR = (RCC->CFGR & ~(RCC_CFGR_SW)) | RCC_CFGR_SW_HSI;
 
-    	/* Select HSI clock as main clock */
-    	RCC->CFGR = (RCC->CFGR & ~(RCC_CFGR_SW)) | RCC_CFGR_SW_HSI;
+			/* Disable PLL */
+			RCC->CR &= ~RCC_CR_PLLON;
 
-    	/* Disable PLL */
-    	RCC->CR &= ~RCC_CR_PLLON;
+			/* Set PLL settings */
+			RCC->PLLCFGR = (RCC->PLLCFGR & ~RCC_PLLR_MASK) | ((PLLRDiv << RCC_PLLR_POS) & RCC_PLLR_MASK);
+			RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_HPRE) |  AHBDiv;
 
-    	/* Set PLL settings */
-    	RCC->PLLCFGR = (RCC->PLLCFGR & ~RCC_PLLN_MASK) | ((PLLNset << RCC_PLLN_POS) & RCC_PLLN_MASK);
-    	RCC->PLLCFGR = (RCC->PLLCFGR & ~RCC_PLLR_MASK) | ((PLLRset << RCC_PLLR_POS) & RCC_PLLR_MASK);
+			/* Enable PLL */
+			RCC->CR |= RCC_CR_PLLON;
+			RCC->PLLCFGR |= RCC_PLLCFGR_PLLREN;
 
-    	/* Enable PLL */
-    	RCC->CR |= RCC_CR_PLLON;
-    	RCC->PLLCFGR |= RCC_PLLCFGR_PLLREN;
+			/* Wait till PLL is ready */
+			while (!(RCC->CR & RCC_CR_PLLRDY));
 
-    	/* Wait till PLL is ready */
-    	while (!(RCC->CR & RCC_CR_PLLRDY));
+			/* Enable PLL as main clock */
+			RCC->CFGR = (RCC->CFGR & ~(RCC_CFGR_SW)) | RCC_CFGR_SW_PLL;
 
-    	/* Enable PLL as main clock */
-    	RCC->CFGR = (RCC->CFGR & ~(RCC_CFGR_SW)) | RCC_CFGR_SW_PLL;
+			/* Disable HSI clock */
+			RCC->CR &= ~RCC_CR_HSION;
 
-    	/* Disable HSI clock */
-    	RCC->CR &= ~RCC_CR_HSION;
-
-    	/* Update system core clock variable */
-    	SystemCoreClockUpdate();
-
-    // Ajustar duracion del tick
-    __portNVIC_SYSTICK_LOAD_REG = ( configCPU_CLOCK_HZ / configTICK_RATE_HZ ) - 1UL;
-	__portNVIC_SYSTICK_CTRL_REG = ( portNVIC_SYSTICK_CLK_BIT | portNVIC_SYSTICK_INT_BIT | portNVIC_SYSTICK_ENABLE_BIT );
-
-	current_freq = frq; // Actualizar frecuencia actual
-  	}
+			/* Update system core clock variable */
+			SystemCoreClockUpdate();
+		}
+	}
 }
 
 
