@@ -1036,10 +1036,11 @@ void TEST_GenericFuncV2( void* params)
 
   for(;;)
   {
+  	ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     // Simulate the work doing by the the task
     vUtilsEatCpu( (TickType_t) ((double) wcets[this_task]) );
 
-    vTaskSuspend( NULL );
+
   }
 
   vTaskDelete( NULL );
@@ -1098,6 +1099,7 @@ void vApplicationTickHook(void)
 	TickType_t xTick;
 	uint32_t PLLRDiv = 0;
   uint32_t AHBDiv = RCC_SYSCLK_DIV4;
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
 /* There are two possibilities for task suspend.
  * The first one is suspend the task suspends itself:
@@ -1109,7 +1111,6 @@ void vApplicationTickHook(void)
 	// Verificar si el TickHook se llama antes o despues del incremento del TickCount y ajustar xTick
 	if ( plan[THIS_CPU][xTick] != plan[THIS_CPU][ (xTick+1) % HYPERPERIOD ] )
 	{
-		vTaskResume( xHandles[ (uint8_t)(plan[xTick+1][THIS_CPU]) ] );
 		if ( plan_freq[THIS_CPU][xTick] != plan_freq[THIS_CPU][ (xTick+1) % HYPERPERIOD ] )
 		{
 			switch( plan_freq[THIS_CPU][(xTick+1) % HYPERPERIOD] )
@@ -1163,6 +1164,14 @@ void vApplicationTickHook(void)
 			/* Update system core clock variable */
 			SystemCoreClockUpdate();
 		}
+		/* Notify the task that the transmission is complete. */
+		vTaskNotifyGiveFromISR( xHandles[ (uint8_t)(plan[xTick+1][THIS_CPU]) ], &xHigherPriorityTaskWoken );
+
+		/* If xHigherPriorityTaskWoken is now set to pdTRUE then a context switch
+		   should be performed to ensure the interrupt returns directly to the highest
+		   priority task.  The macro used for this purpose is dependent on the port in
+		   use and may be called portEND_SWITCHING_ISR(). */
+		portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
 	}
 }
 
