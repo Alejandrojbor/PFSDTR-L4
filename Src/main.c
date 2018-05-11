@@ -1,7 +1,7 @@
 /**
   ******************************************************************************
   *  Name        : main.c
-  *  Author      : Alejandro Borghero & Gabriel Eggly
+  *  Author      : Alejandro Borghero, Gabriel Eggly, Matías Micheletto
   *  Version     :
   *  Copyright   : GPLv3
   *  Description : Planificación Óptima de un Sistema Multiprocesador de Tiempo 
@@ -73,36 +73,38 @@ UART_HandleTypeDef huart2;
 
 RCC_OscInitTypeDef RCC_OscInitStruct;
 
-uint32_t current_freq = 100;
-uint32_t frq = 25;
+//uint32_t current_freq = 100;
+uint8_t frq = 25;
 
 //enum SysFreq{F_025, F_050, F_075, F_100};
 //SysFreq current_freq = F_100;
 
-const char periods[TASK_CNT] = {10,10,15,15,15};
+const uint8_t periods[TASK_CNT] = {10,10,15,15,15};
 
 // Tasks execution time
-const char wcets[TASK_CNT] = {2,2,3,3,3};
+const uint8_t wcets[TASK_CNT] = {2,2,3,3,3};
 
 // Precedences {Tx,Rx}
-const char msgs[MSG_CNT][2] = { {1,2},{3,4},{3,5}};
+const uint8_t msgs[MSG_CNT][2] = { {1,2},{3,4},{3,5}};
+// Queues
+QueueHandle_t xQueues[MSG_CNT] = {NULL,};
 				
 // Jobs and power level asignation to each cpu (calculated with the optimizer)
-const int job_cpu[TASK_CNT][6] = {{1,2,2}, {1,2,2}, {2,1,0}, {2,2,0},{1,1,0}};
+const uint8_t job_cpu[TASK_CNT][6] = {{1,2,2}, {1,2,2}, {2,1,0}, {2,2,0},{1,1,0}};
 				  
-const int job_freq[TASK_CNT][6] = {    {050,050,050},
+const uint8_t job_freq[TASK_CNT][6] = {    {050,050,050},
                                        {025,050,100},
                                        {050,050,000},
                                        {100,100,000},
                                        {100,050,000},
                                   };
 				       
-int job_cnt[TASK_CNT]; 			// Number of instances for each task
+uint8_t job_cnt[TASK_CNT]; 			// Number of instances for each task
 
-const char plan[ CPU_CNT ][HYPERPERIOD] = {{1,1,1,1,2,2,2,2,2,2,2,2,5,5,5,3,3,3,3,3,3,5,5,5,5,5,5,0,0,0},
+const uint8_t plan[ CPU_CNT ][HYPERPERIOD] = {{1,1,1,1,2,2,2,2,2,2,2,2,5,5,5,3,3,3,3,3,3,5,5,5,5,5,5,0,0,0},
 																				 {3,3,3,3,3,3,4,4,4,0,1,1,1,1,2,2,2,2,0,0,1,1,1,1,2,2,4,4,4,0}};
 
-const char plan_freq[ CPU_CNT ][HYPERPERIOD] = {{50,50,50,50,25,25,25,25,25,25,25,25,100,100,100,50,50,50,50,50,50,50,50,50,50,50,50,0,0,0},
+const uint8_t plan_freq[ CPU_CNT ][HYPERPERIOD] = {{50,50,50,50,25,25,25,25,25,25,25,25,100,100,100,50,50,50,50,50,50,50,50,50,50,50,50,0,0,0},
 		 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	{50,50,50,50,50,50,100,100,100,0,50,50,50,50,50,50,50,50,0,0,50,50,50,50,100,100,100,100,100,0}};
 
 TaskHandle_t xHandles[TASK_CNT];
@@ -125,6 +127,7 @@ static void MX_CAN1_Init(void);
 
 static void TEST_CAN( void* pvParams );
 void TEST_GenericFuncV2( void* params);
+void TEST_GenericFuncV3( void* params);
 //static void Task_Body( void* pvParams );
 //static void Task_Body1( void* pvParams );
 //static void Task_Body2( void* pvParams );
@@ -170,7 +173,7 @@ int main(void)
   //Task definition example for vTaskSuspend and vTaskResume
   //  xTaskCreate( Task_Body, "TaskName", 128, NULL, configMAX_PRIORITIES-1, xHandles[TASK_CNT] );
 for (uint8_t tasknum=1; tasknum <= TASK_CNT; ++tasknum)
-	xTaskCreate( TEST_GenericFuncV2, NULL, 128, (void *)(tasknum), configMAX_PRIORITIES-1, xHandles[tasknum] );
+	xTaskCreate( TEST_GenericFuncV3, NULL, 128, (void *)(&tasknum), configMAX_PRIORITIES-1, xHandles[tasknum-1] );
 	//  xTaskCreate( Task_Body, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
 	//  xTaskCreate( Task_Body1, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
 	//  xTaskCreate( Task_Body2, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
@@ -179,8 +182,15 @@ for (uint8_t tasknum=1; tasknum <= TASK_CNT; ++tasknum)
 
 
   /* Queues creation -------------------------------------------------------------*/
+for (uint8_t i=0; i<TASK_CNT; ++i)
+{
+	xQueues[i] = xQueueCreate( 4, sizeof( uint8_t ) );
+	if(xQueues[i] == NULL)
+	{
+		Error_Handler(7);
+	}
+}
 
-  // Configurar Colas!! 
 
  
   /* Start scheduler */
@@ -1025,12 +1035,47 @@ static void TEST_FreqSwitch( void* pvParams )
 	/* If the tasks ever leaves the for cycle, kill it. */
 	vTaskDelete( NULL );
 }
+
+
+void TEST_GenericFuncV3( void* params)
+// Generic task (The task number is passed as "params" argument )
+{
+
+  // Actual task number
+  uint8_t this_task = *((uint8_t*) params);
+  // Instance counter. It begins in -1 because the initial increment
+//  int this_job = -1;
+  uint8_t usDataSend=5, usDataReceive, i;
+
+  for(;;)
+  {
+    // Wait for TickHook unlock the task with a notification ( Offline Scheduling)
+  	ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+  	// Receive messages from all precedent tasks
+  	for ( i=0; i<MSG_CNT; ++i )
+  	  		if(msgs[i][1] == this_task)
+  	  			xQueueReceive(xQueues[this_task-1], &usDataReceive, portMAX_DELAY);
+
+    // Simulate the work doing by the the task
+    vUtilsEatCpu( (TickType_t) ((double) wcets[this_task]) );
+
+  	// Send messages to all successor tasks
+  	for ( i=0; i<MSG_CNT; ++i )
+  		if(msgs[i][0] == this_task)
+  			xQueueSend(xQueues[msgs[i][1]-1], &usDataSend, portMAX_DELAY);
+  }
+
+  vTaskDelete( NULL );
+}
+
+
 void TEST_GenericFuncV2( void* params)
 // Generic task (The task number is passed as "params" argument )
 {
 
   // Actual task number
-  unsigned char this_task = *((unsigned char*) params);
+  uint8_t this_task = *((uint8_t*) params);
   // Instance counter. It begins in -1 because the initial incremnte
   int this_job = -1;
 
@@ -1052,7 +1097,7 @@ void TEST_GenericFunc( void* params)
 {
   TickType_t xPreviousWakeTime = xTaskGetTickCount();
 
-  unsigned char this_task = *((unsigned char*) params); // Numero de la tarea actual
+  uint8_t this_task = *((uint8_t*) params); // Numero de la tarea actual
   int this_job = -1; // Contador de instancias. Inicializa en -1 porque se incrementa al principio
 
   for(;;)
@@ -1109,11 +1154,14 @@ void vApplicationTickHook(void)
  */
 	xTick = xTaskGetTickCountFromISR() % HYPERPERIOD;
 	// Verificar si el TickHook se llama antes o despues del incremento del TickCount y ajustar xTick
-	if ( plan[THIS_CPU][xTick] != plan[THIS_CPU][ (xTick+1) % HYPERPERIOD ] )
-	{
-		if ( plan_freq[THIS_CPU][xTick] != plan_freq[THIS_CPU][ (xTick+1) % HYPERPERIOD ] )
-		{
-			switch( plan_freq[THIS_CPU][(xTick+1) % HYPERPERIOD] )
+	// (En teoria xTickCount se incrementa previo al al llamado de TickHook, verificar con hardware
+//	Para igualar en todos los uC las demoras introducidas por los cambios de frecuencia se solicitará el cambio de
+//	 la misma, incluso si en la siguiente ranura se usa la misma frecuencia.
+//	if ( plan[THIS_CPU][xTick] != plan[THIS_CPU][ (xTick+1) % HYPERPERIOD ] )
+//	{
+//		if ( plan_freq[THIS_CPU][xTick] != plan_freq[THIS_CPU][ (xTick+1) % HYPERPERIOD ] )
+//		{
+			switch( plan_freq[THIS_CPU][(xTick) % HYPERPERIOD] )
 			{
 			case 25:						// 10MHz
 				PLLRDiv = 3;
@@ -1163,16 +1211,16 @@ void vApplicationTickHook(void)
 
 			/* Update system core clock variable */
 			SystemCoreClockUpdate();
-		}
+//		}
 		/* Notify the task that the transmission is complete. */
-		vTaskNotifyGiveFromISR( xHandles[ (uint8_t)(plan[xTick+1][THIS_CPU]) ], &xHigherPriorityTaskWoken );
+		vTaskNotifyGiveFromISR( xHandles[ (uint8_t)(plan[xTick %HYPERPERIOD][THIS_CPU]) -1 ], &xHigherPriorityTaskWoken );
 
 		/* If xHigherPriorityTaskWoken is now set to pdTRUE then a context switch
 		   should be performed to ensure the interrupt returns directly to the highest
 		   priority task.  The macro used for this purpose is dependent on the port in
 		   use and may be called portEND_SWITCHING_ISR(). */
 		portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-	}
+//	}
 }
 
 
