@@ -391,23 +391,51 @@ static void MX_CAN1_Init(void)
   {
     Error_Handler(hcan1.State);
   }
-// Filter configuration
-	sFilterConfig.FilterNumber = 0;
-	sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
-	sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
-	sFilterConfig.FilterIdHigh = 0x0000;
-	sFilterConfig.FilterIdLow = 0x0000;
+//// Filter configuration
+//	sFilterConfig.FilterNumber = 0;
+//	sFilterConfig.FilterMode = CAN_FILTERMODE_IDLIST;
+//	sFilterConfig.FilterScale = CAN_FILTERSCALE_16BIT;
+//	sFilterConfig.FilterIdHigh = 0x0000;			// See RM0351 pag. 1631 - Filter bank scale and mode configuration
+//	// Task number 1
+//	sFilterConfig.FilterIdLow = 0x0000;
+//	sFilterConfig.FilterMaskIdHigh = 0x0001;
+//	sFilterConfig.FilterMaskIdLow = 0x0000;
+//	sFilterConfig.FilterFIFOAssignment = 0;
+//	sFilterConfig.FilterActivation = ENABLE;
+//	sFilterConfig.BankNumber = 0;
+//
+//	if(HAL_CAN_ConfigFilter(&hcan1, &sFilterConfig) != HAL_OK)
+//	{
+//		/* Filter configuration Error */
+//		Error_Handler(1);
+//	}
+	// Filter configuration
+	sFilterConfig.FilterMode = CAN_FILTERMODE_IDLIST;
+	sFilterConfig.FilterScale = CAN_FILTERSCALE_16BIT;
 	sFilterConfig.FilterMaskIdHigh = 0x0000;
 	sFilterConfig.FilterMaskIdLow = 0x0000;
 	sFilterConfig.FilterFIFOAssignment = 0;
+	sFilterConfig.BankNumber = 0;
 	sFilterConfig.FilterActivation = ENABLE;
-	sFilterConfig.BankNumber = 14;
 
-	if(HAL_CAN_ConfigFilter(&hcan1, &sFilterConfig) != HAL_OK)
+	for (uint8_t i=0; i<TASK_CNT; ++i)
 	{
-		/* Filter configuration Error */
-		Error_Handler(1);
+		//Bank Number (increases 1 in 4)
+		if(i)	sFilterConfig.BankNumber += i%4?0:1;
+		// Filter Number
+		sFilterConfig.FilterNumber = i%4;
+		// Task number i-1 (Starting task from 1)
+		sFilterConfig.FilterIdHigh = i >> 2;			// See RM0351 pag. 1631 - Filter bank scale and mode configuration
+		sFilterConfig.FilterIdLow = i << 6;
+
+		if(HAL_CAN_ConfigFilter(&hcan1, &sFilterConfig) != HAL_OK)
+		{
+			/* Filter configuration Error */
+			Error_Handler(1);
+		}
 	}
+
+
 // Configure transmission process
 	hcan1.pTxMsg->StdId = 0x11;
 	hcan1.pTxMsg->ExtId = 0x0;
