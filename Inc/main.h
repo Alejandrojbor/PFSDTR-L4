@@ -215,7 +215,7 @@
 #define RCC_PLLR_MASK    ((uint32_t)0x06000000)
 #define RCC_PLLR_POS     25
 
-#define THIS_CPU			0 		// Current cpu number
+#define THIS_CPU			2 		// Current cpu number
 #define CPU_CNT				2		// Number of CPUs
 #define TASK_CNT			5 		// Number of tasks
 #define MSG_CNT 			3 		// Number of system messages

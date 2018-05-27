@@ -27,7 +27,8 @@
   * TODO:
   * 			Verify the can TxMessage and RxMessage  to the handler (hcan)
   * 			Program Queues for tasks
-  * 			Verificar si el TickHook se llama antes o despues del incremento del TickCount y ajustar xTick
+  * 			Verificar si el TickHook se llama antes o despues del incremento del
+  * 				TickCount y ajustar xTick
   * 			Verificar demoras de conmutación de frecuencia:
   * 				1- Demora en conmutación del core clock (puede usarse MCO para medirlo)
   * 				2- Demora en conmutación del timer4 (FreeRTOS tick)
@@ -92,12 +93,12 @@ QueueHandle_t xQueues[MSG_CNT] = {NULL,};
 // Jobs and power level asignation to each cpu (calculated with the optimizer)
 const uint8_t job_cpu[TASK_CNT][6] = {{1,2,2}, {1,2,2}, {2,1,0}, {2,2,0},{1,1,0}};
 				  
-const uint8_t job_freq[TASK_CNT][6] = {    {050,050,050},
+const uint8_t job_freq[TASK_CNT][6] = {{050,050,050},
                                        {025,050,100},
                                        {050,050,000},
                                        {100,100,000},
                                        {100,050,000},
-                                  };
+																			};
 				       
 uint8_t job_cnt[TASK_CNT]; 			// Number of instances for each task
 
@@ -410,6 +411,7 @@ static void MX_CAN1_Init(void)
 //		Error_Handler(1);
 //	}
 	// Filter configuration
+  // There are 4 filters of 16 bits each in ID list mode per bank
 	sFilterConfig.FilterMode = CAN_FILTERMODE_IDLIST;
 	sFilterConfig.FilterScale = CAN_FILTERSCALE_16BIT;
 	sFilterConfig.FilterMaskIdHigh = 0x0000;
@@ -422,11 +424,18 @@ static void MX_CAN1_Init(void)
 	{
 		//Bank Number (increases 1 in 4)
 		if(i)	sFilterConfig.BankNumber += i%4?0:1;
-		// Filter Number
+		// Filter Number (from 0 to 3 for every bank)
 		sFilterConfig.FilterNumber = i%4;
-		// Task number i-1 (Starting task from 1)
-		sFilterConfig.FilterIdHigh = i >> 2;			// See RM0351 pag. 1631 - Filter bank scale and mode configuration
-		sFilterConfig.FilterIdLow = i << 6;
+		// The Identifier contains CPU Number and task number i-1 (Starting task from 1)
+		// See RM0351 pag. 1631 - Filter bank scale and mode configuration
+		//
+		//	    Filter ID High	   |     Filter ID Low
+		//  15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
+		// +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+		// | CPU |        Task Number       | 0| 0|   000  |
+		// +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+		sFilterConfig.FilterIdHigh = ((i+1) >> 2) & (THIS_CPU<<6);
+		sFilterConfig.FilterIdLow = (i+1) << 6;
 
 		if(HAL_CAN_ConfigFilter(&hcan1, &sFilterConfig) != HAL_OK)
 		{
@@ -441,7 +450,7 @@ static void MX_CAN1_Init(void)
 	hcan1.pTxMsg->ExtId = 0x0;
 	hcan1.pTxMsg->RTR = CAN_RTR_DATA;
 	hcan1.pTxMsg->IDE = CAN_ID_STD;
-	hcan1.pTxMsg->DLC = 2;
+	hcan1.pTxMsg->DLC = 1;
 
 }
 
@@ -835,34 +844,36 @@ HAL_StatusTypeDef CAN_Polling(void)
   */
 void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef* hcan)
 {
-  if ((hcan->pRxMsg->StdId == 0x11)&&(hcan->pRxMsg->IDE == CAN_ID_STD) && (hcan->pRxMsg->DLC == 2))
-  {
-//  	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_RESET);
-    switch(hcan->pRxMsg->Data[0])
-    {
-    /* Shutdown leds */
-    case 0:
-    	HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED, GPIO_PIN_RESET);
-    	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_SET);
-    	break;
-    case 1:
-    	HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED, GPIO_PIN_SET);
-    	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_SET);
-    	break;
-    case 2:
-    	HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED, GPIO_PIN_SET);
-    	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_RESET);
-    	break;
-    case 3:
-    	HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED, GPIO_PIN_RESET);
-    	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_RESET);
-    	break;
-    case 4:
-    	break;
-    default:
-    	break;
-    }
-  }
+	BaseType_t xHigherPriorityTaskWoken;
+
+//  if ((hcan->pRxMsg->StdId == 0x11)&&(hcan->pRxMsg->IDE == CAN_ID_STD) && (hcan->pRxMsg->DLC == 2))
+//  {
+////  	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_RESET);
+//    switch(hcan->pRxMsg->Data[0])
+//    {
+//    /* Shutdown leds */
+//    case 0:
+//    	HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED, GPIO_PIN_RESET);
+//    	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_SET);
+//    	break;
+//    case 1:
+//    	HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED, GPIO_PIN_SET);
+//    	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_SET);
+//    	break;
+//    case 2:
+//    	HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED, GPIO_PIN_SET);
+//    	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_RESET);
+//    	break;
+//    case 3:
+//    	HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED, GPIO_PIN_RESET);
+//    	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_RESET);
+//    	break;
+//    case 4:
+//    	break;
+//    default:
+//    	break;
+//    }
+//  }
 
 //  while(HAL_CAN_Receive_IT(hcan, CAN_FIFO0)  != HAL_OK)
 //  	{
@@ -871,6 +882,10 @@ void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef* hcan)
 //
 //  	}
 
+	/* We have not woken a task at the start of the ISR. */
+	xHigherPriorityTaskWoken = pdFALSE;
+  // Sends the received message from CAN to the corresponding queue
+	xQueueSendFromISR( xQueues[hcan->pRxMsg->FMI], &hcan->pRxMsg->Data[0], &xHigherPriorityTaskWoken );
 
 // Rearm the receive interrupt
   if(ALE_CAN_Receive_IT(hcan, CAN_FIFO0) != HAL_OK)
@@ -878,6 +893,119 @@ void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef* hcan)
     /* Reception Error */
     Error_Handler(6);
   }
+
+  if( xHigherPriorityTaskWoken )
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+}
+
+/**
+  * @brief  Update SystemCoreClock variable according to Clock Register Values.
+  *         The SystemCoreClock variable contains the core clock (HCLK), it can
+  *         be used by the user application to setup the SysTick timer or configure
+  *         other parameters. Modified to run in the Tick Hook of FreeRTOS.
+  *
+  * @note   Each time the core clock (HCLK) changes, this function must be called
+  *         to update SystemCoreClock variable value. Otherwise, any configuration
+  *         based on this variable will be incorrect.
+  *
+  * @note   - The system frequency computed by this function is not the real
+  *           frequency in the chip. It is calculated based on the predefined
+  *           constant and the selected clock source:
+  *
+  *           - If SYSCLK source is MSI, SystemCoreClock will contain the MSI_VALUE(*)
+  *
+  *           - If SYSCLK source is HSI, SystemCoreClock will contain the HSI_VALUE(**)
+  *
+  *           - If SYSCLK source is HSE, SystemCoreClock will contain the HSE_VALUE(***)
+  *
+  *           - If SYSCLK source is PLL, SystemCoreClock will contain the HSE_VALUE(***)
+  *             or HSI_VALUE(*) or MSI_VALUE(*) multiplied/divided by the PLL factors.
+  *
+  *         (*) MSI_VALUE is a constant defined in stm32l4xx_hal.h file (default value
+  *             4 MHz) but the real value may vary depending on the variations
+  *             in voltage and temperature.
+  *
+  *         (**) HSI_VALUE is a constant defined in stm32l4xx_hal.h file (default value
+  *              16 MHz) but the real value may vary depending on the variations
+  *              in voltage and temperature.
+  *
+  *         (***) HSE_VALUE is a constant defined in stm32l4xx_hal.h file (default value
+  *              8 MHz), user has to ensure that HSE_VALUE is same as the real
+  *              frequency of the crystal used. Otherwise, this function may
+  *              have wrong result.
+  *
+  *         - The result of this function could be not correct when using fractional
+  *           value for HSE crystal.
+  *
+  * @param  None
+  * @retval None
+  */
+inline void ALE_SystemCoreClockUpdate(void)
+{
+  uint32_t tmp = 0, msirange = 0, pllvco = 0, pllr = 2, pllsource = 0, pllm = 2;
+
+  /* Get MSI Range frequency--------------------------------------------------*/
+  if((RCC->CR & RCC_CR_MSIRGSEL) == RESET)
+  { /* MSISRANGE from RCC_CSR applies */
+    msirange = (RCC->CSR & RCC_CSR_MSISRANGE) >> 8;
+  }
+  else
+  { /* MSIRANGE from RCC_CR applies */
+    msirange = (RCC->CR & RCC_CR_MSIRANGE) >> 4;
+  }
+  /*MSI frequency range in HZ*/
+  msirange = MSIRangeTable[msirange];
+
+  /* Get SYSCLK source -------------------------------------------------------*/
+  switch (RCC->CFGR & RCC_CFGR_SWS)
+  {
+    case 0x00:  /* MSI used as system clock source */
+      SystemCoreClock = msirange;
+      break;
+
+    case 0x04:  /* HSI used as system clock source */
+      SystemCoreClock = HSI_VALUE;
+      break;
+
+    case 0x08:  /* HSE used as system clock source */
+      SystemCoreClock = HSE_VALUE;
+      break;
+
+    case 0x0C:  /* PLL used as system clock  source */
+      /* PLL_VCO = (HSE_VALUE or HSI_VALUE or MSI_VALUE/ PLLM) * PLLN
+         SYSCLK = PLL_VCO / PLLR
+         */
+      pllsource = (RCC->PLLCFGR & RCC_PLLCFGR_PLLSRC);
+      pllm = ((RCC->PLLCFGR & RCC_PLLCFGR_PLLM) >> 4) + 1 ;
+
+      switch (pllsource)
+      {
+        case 0x02:  /* HSI used as PLL clock source */
+          pllvco = (HSI_VALUE / pllm);
+          break;
+
+        case 0x03:  /* HSE used as PLL clock source */
+          pllvco = (HSE_VALUE / pllm);
+          break;
+
+        default:    /* MSI used as PLL clock source */
+          pllvco = (msirange / pllm);
+          break;
+      }
+      pllvco = pllvco * ((RCC->PLLCFGR & RCC_PLLCFGR_PLLN) >> 8);
+      pllr = (((RCC->PLLCFGR & RCC_PLLCFGR_PLLR) >> 25) + 1) * 2;
+      SystemCoreClock = pllvco/pllr;
+      break;
+
+    default:
+      SystemCoreClock = msirange;
+      break;
+  }
+  /* Compute HCLK clock frequency --------------------------------------------*/
+  /* Get HCLK prescaler */
+  tmp = AHBPrescTable[((RCC->CFGR & RCC_CFGR_HPRE) >> 4)];
+  /* HCLK clock frequency */
+  SystemCoreClock >>= tmp;
 }
 
 /**
@@ -1071,27 +1199,58 @@ void TEST_GenericFuncV3( void* params)
 
   // Actual task number
   uint8_t this_task = *((uint8_t*) params);
+  uint8_t cpu_dest = 0;
+  uint8_t instance=0;
   // Instance counter. It begins in -1 because the initial increment
 //  int this_job = -1;
   uint8_t usDataSend=5, usDataReceive, i;
 
   for(;;)
   {
-    // Wait for TickHook unlock the task with a notification ( Offline Scheduling)
+  	// TEST - Keep the green LED on while task 1 is running in cpu 1 (task 3 for cpu 2)
+  	if( (THIS_CPU == 1 && this_task == 1) || (THIS_CPU == 2 && this_task == 3) )
+  		HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_RESET);
+//  	HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED, GPIO_PIN_RESET);
+
+  	// Wait for TickHook unlock the task with a notification ( Offline Scheduling)
   	ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+  	// TEST - Keep the green LED on while task 1 is running in cpu 1 (task 3 for cpu 2)
+  	if( (THIS_CPU == 1 && this_task == 1) || (THIS_CPU == 2 && this_task == 3) )
+  		HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_SET);
+//  	HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED, GPIO_PIN_SET);
 
   	// Receive messages from all precedent tasks
   	for ( i=0; i<MSG_CNT; ++i )
   	  		if(msgs[i][1] == this_task)
   	  			xQueueReceive(xQueues[this_task-1], &usDataReceive, portMAX_DELAY);
 
-    // Simulate the work doing by the the task
+    // Simulates the work done by the the task
     vUtilsEatCpu( (TickType_t) ((double) wcets[this_task]) );
 
   	// Send messages to all successor tasks
   	for ( i=0; i<MSG_CNT; ++i )
+  		// Check if this task sends messages
   		if(msgs[i][0] == this_task)
-  			xQueueSend(xQueues[msgs[i][1]-1], &usDataSend, portMAX_DELAY);
+  		{
+  			// OJO Verificar número de instancia
+  			instance = (uint8_t)(xTaskGetTickCount()%HYPERPERIOD)/periods[this_task-1];
+  			cpu_dest= job_cpu[this_task-1][instance];
+  			// Check if the successor task is in this cpu
+  			if( cpu_dest == THIS_CPU )
+  				xQueueSend(xQueues[msgs[i][1]-1], &usDataSend, portMAX_DELAY);
+  			else
+  			{
+  				hcan1.pTxMsg->StdId = (cpu_dest<<9)	| msgs[i][1];
+  				hcan1.pTxMsg->Data[0]= usDataSend;
+  				 if(HAL_CAN_Transmit_IT(&hcan1) != HAL_OK)
+  				  {
+  				    /* Transmission Error */
+  				    Error_Handler(1);
+  				  }
+  			}
+  		}
+
   }
 
   vTaskDelete( NULL );
@@ -1189,7 +1348,7 @@ void vApplicationTickHook(void)
 //	{
 //		if ( plan_freq[THIS_CPU][xTick] != plan_freq[THIS_CPU][ (xTick+1) % HYPERPERIOD ] )
 //		{
-			switch( plan_freq[THIS_CPU][(xTick) % HYPERPERIOD] )
+			switch( plan_freq[THIS_CPU-1][(xTick) % HYPERPERIOD] )
 			{
 			case 25:						// 10MHz
 				PLLRDiv = 3;
@@ -1205,7 +1364,7 @@ void vApplicationTickHook(void)
 				break;
 			default: 						// 40MHz
 				PLLRDiv = 0;
-				AHBDiv = RCC_SYSCLK_DIV4;
+				AHBDiv = RCC_SYSCLK_DIV1;		// Free slots run at 25 MHz
 			}
 
 			/* Enable HSI clock */
@@ -1238,10 +1397,10 @@ void vApplicationTickHook(void)
 			RCC->CR &= ~RCC_CR_HSION;
 
 			/* Update system core clock variable */
-			SystemCoreClockUpdate();
+			ALE_SystemCoreClockUpdate();
 //		}
 		/* Notify the task that the transmission is complete. */
-		vTaskNotifyGiveFromISR( xHandles[ (uint8_t)(plan[xTick %HYPERPERIOD][THIS_CPU]) -1 ], &xHigherPriorityTaskWoken );
+		vTaskNotifyGiveFromISR( xHandles[ (uint8_t)(plan[xTick %HYPERPERIOD][THIS_CPU-1]) -1 ], &xHigherPriorityTaskWoken );
 
 		/* If xHigherPriorityTaskWoken is now set to pdTRUE then a context switch
 		   should be performed to ensure the interrupt returns directly to the highest
