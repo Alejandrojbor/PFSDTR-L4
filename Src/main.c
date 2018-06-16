@@ -54,7 +54,7 @@
 #include "task.h"
 #include "queue.h"
 
-#define CPU_CNT             // Corregir error de compilacion cuando se define en main.h
+//#define CPU_CNT             // Corregir error de compilacion cuando se define en main.h
 /* Private variables ---------------------------------------------------------*/
 CAN_HandleTypeDef hcan1;
 
@@ -88,12 +88,12 @@ const uint8_t wcets[TASK_CNT] = {2,2,3,3,3};
 // Precedences {Tx,Rx}
 const uint8_t msgs[MSG_CNT][2] = { {1,2},{3,4},{3,5}};
 // Queues
-QueueHandle_t xQueues[MSG_CNT] = {NULL,};
+QueueHandle_t xQueues[TASK_CNT] = {NULL,};
 				
 // Jobs and power level asignation to each cpu (calculated with the optimizer)
-const uint8_t job_cpu[TASK_CNT][6] = {{1,2,2}, {1,2,2}, {2,1,0}, {2,2,0},{1,1,0}};
+const uint8_t job_cpu[TASK_CNT][3] = {{1,2,2}, {1,2,2}, {2,1,0}, {2,2,0},{1,1,0}};
 				  
-const uint8_t job_freq[TASK_CNT][6] = {{050,050,050},
+const uint8_t job_freq[TASK_CNT][3] = {{050,050,050},
                                        {025,050,100},
                                        {050,050,000},
                                        {100,100,000},
@@ -110,6 +110,7 @@ const uint8_t plan_freq[ CPU_CNT ][HYPERPERIOD] = {{50,50,50,50,25,25,25,25,25,2
 
 TaskHandle_t xHandles[TASK_CNT];
 
+uint8_t act_task=3;
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
@@ -127,8 +128,8 @@ static void MX_USART2_UART_Init(void);
 static void MX_CAN1_Init(void);
 
 static void TEST_CAN( void* pvParams );
-void TEST_GenericFuncV2( void* params);
-void TEST_GenericFuncV3( void* params);
+static void TEST_GenericFuncV2( void* params);
+static void TEST_GenericFuncV3( void* params);
 //static void Task_Body( void* pvParams );
 //static void Task_Body1( void* pvParams );
 //static void Task_Body2( void* pvParams );
@@ -193,9 +194,10 @@ for (uint8_t i=0; i<TASK_CNT; ++i)
 }
 
 
- 
+//HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, GPIO_PIN_SET);
   /* Start scheduler */
   vTaskStartScheduler();
+//  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
 
   /* We should never get here as control is now taken by the scheduler */
 
@@ -773,6 +775,48 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(XL_INT_GPIO_Port, &GPIO_InitStruct);
 
+//  ----- pINES DE TESTEO //
+  /*Configure GPIO pin :  */
+  GPIO_InitStruct.Pin = GPIO_PIN_0;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin :  */
+   GPIO_InitStruct.Pin = GPIO_PIN_5;
+   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+   GPIO_InitStruct.Pull = GPIO_NOPULL;
+   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+   /*Configure GPIO pin :  */
+    GPIO_InitStruct.Pin = GPIO_PIN_1;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    /*Configure GPIO pin :  */
+     GPIO_InitStruct.Pin = GPIO_PIN_2;
+     GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+     GPIO_InitStruct.Pull = GPIO_NOPULL;
+     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+     /*Configure GPIO pin :  */
+      GPIO_InitStruct.Pin = GPIO_PIN_3;
+      GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+      GPIO_InitStruct.Pull = GPIO_NOPULL;
+      GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+      HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_RESET);
+
 }
 
 /**
@@ -1193,7 +1237,7 @@ static void TEST_FreqSwitch( void* pvParams )
 }
 
 
-void TEST_GenericFuncV3( void* params)
+static void TEST_GenericFuncV3( void* params)
 // Generic task (The task number is passed as "params" argument )
 {
 
@@ -1207,6 +1251,27 @@ void TEST_GenericFuncV3( void* params)
 
   for(;;)
   {
+  	switch(this_task)
+  	{
+  	case 1:
+  		HAL_GPIO_WritePin(GPIOE, GPIO_PIN_0, GPIO_PIN_SET);
+  		break;
+  	case 2:
+  		HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5, GPIO_PIN_SET);
+  		break;
+  	case 3:
+  		HAL_GPIO_WritePin(GPIOE, GPIO_PIN_1, GPIO_PIN_SET);
+  		break;
+  	case 4:
+  		HAL_GPIO_WritePin(GPIOE, GPIO_PIN_2, GPIO_PIN_SET);
+  		break;
+  	case 5:
+  		HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, GPIO_PIN_SET);
+  		break;
+  	}
+
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_SET);
+    act_task=this_task;
   	// TEST - Keep the green LED on while task 1 is running in cpu 1 (task 3 for cpu 2)
   	if( (THIS_CPU == 1 && this_task == 1) || (THIS_CPU == 2 && this_task == 3) )
   		HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_RESET);
@@ -1257,7 +1322,7 @@ void TEST_GenericFuncV3( void* params)
 }
 
 
-void TEST_GenericFuncV2( void* params)
+static void TEST_GenericFuncV2( void* params)
 // Generic task (The task number is passed as "params" argument )
 {
 
@@ -1327,7 +1392,7 @@ void vUtilsEatCpu( UBaseType_t ticks )
 void vApplicationTickHook(void)
 {
 	/* Configure the main PLL clock source, multiplication and division factors. */
-
+  uint8_t nxt_task=1;
 	TickType_t xTick;
 	uint32_t PLLRDiv = 0;
   uint32_t AHBDiv = RCC_SYSCLK_DIV4;
@@ -1399,8 +1464,16 @@ void vApplicationTickHook(void)
 			/* Update system core clock variable */
 			ALE_SystemCoreClockUpdate();
 //		}
-		/* Notify the task that the transmission is complete. */
-		vTaskNotifyGiveFromISR( xHandles[ (uint8_t)(plan[xTick %HYPERPERIOD][THIS_CPU-1]) -1 ], &xHigherPriorityTaskWoken );
+
+			__portNVIC_SYSTICK_LOAD_REG = ( configCPU_CLOCK_HZ / configTICK_RATE_HZ ) - 1UL;
+			__portNVIC_SYSTICK_CTRL_REG = ( portNVIC_SYSTICK_CLK_BIT | portNVIC_SYSTICK_INT_BIT | portNVIC_SYSTICK_ENABLE_BIT );
+
+			nxt_task=(uint8_t)(plan[xTick %HYPERPERIOD][THIS_CPU-1]);
+			if (nxt_task && (act_task != nxt_task))
+			{
+				/* Notify the task that the transmission is complete. */
+				vTaskNotifyGiveFromISR( xHandles[ nxt_task -1 ], &xHigherPriorityTaskWoken );
+			}
 
 		/* If xHigherPriorityTaskWoken is now set to pdTRUE then a context switch
 		   should be performed to ensure the interrupt returns directly to the highest
