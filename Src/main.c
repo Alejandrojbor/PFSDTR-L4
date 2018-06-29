@@ -175,7 +175,7 @@ int main(void)
   //Task definition example for vTaskSuspend and vTaskResume
   //  xTaskCreate( Task_Body, "TaskName", 128, NULL, configMAX_PRIORITIES-1, xHandles[TASK_CNT] );
 for (uint8_t tasknum=1; tasknum <= TASK_CNT; ++tasknum)
-	xTaskCreate( TEST_GenericFuncV3, NULL, 128, (void *)(&tasknum), configMAX_PRIORITIES-1, xHandles[tasknum-1] );
+	xTaskCreate( TEST_GenericFuncV3, NULL, 128, (void *)(tasknum), configMAX_PRIORITIES-1, &xHandles[tasknum-1] );
 	//  xTaskCreate( Task_Body, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
 	//  xTaskCreate( Task_Body1, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
 	//  xTaskCreate( Task_Body2, NULL, 128, NULL, configMAX_PRIORITIES-1, NULL );
@@ -285,14 +285,14 @@ void SystemClock_Config(void)
   PeriphClkInit.PLLSAI1.PLLSAI1ClockOut = RCC_PLLSAI1_SAI1CLK;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
-    Error_Handler(1);
+    Error_Handler(8);
   }
 
     /**Configure the main internal regulator output voltage 
     */
   if (HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1) != HAL_OK)
   {
-    Error_Handler(1);
+    Error_Handler(9);
   }
 
     /**Configure the Systick interrupt time 
@@ -392,7 +392,8 @@ static void MX_CAN1_Init(void)
 
   if (HAL_CAN_Init(&hcan1) != HAL_OK)
   {
-    Error_Handler(hcan1.State);
+//    Error_Handler(hcan1.State);
+    Error_Handler(4);
   }
 //// Filter configuration
 //	sFilterConfig.FilterNumber = 0;
@@ -442,7 +443,7 @@ static void MX_CAN1_Init(void)
 		if(HAL_CAN_ConfigFilter(&hcan1, &sFilterConfig) != HAL_OK)
 		{
 			/* Filter configuration Error */
-			Error_Handler(1);
+			Error_Handler(5);
 		}
 	}
 
@@ -471,14 +472,14 @@ static void MX_I2C1_Init(void)
   hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
   if (HAL_I2C_Init(&hi2c1) != HAL_OK)
   {
-    Error_Handler(1);
+    Error_Handler(11);
   }
 
     /**Configure Analogue filter 
     */
   if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
   {
-    Error_Handler(1);
+    Error_Handler(11);
   }
 
 }
@@ -498,14 +499,14 @@ static void MX_I2C2_Init(void)
   hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
   if (HAL_I2C_Init(&hi2c2) != HAL_OK)
   {
-    Error_Handler(1);
+    Error_Handler(11);
   }
 
     /**Configure Analogue filter 
     */
   if (HAL_I2CEx_ConfigAnalogFilter(&hi2c2, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
   {
-    Error_Handler(1);
+    Error_Handler(11);
   }
 
 }
@@ -529,7 +530,7 @@ static void MX_LCD_Init(void)
   hlcd.Init.HighDrive = LCD_HIGHDRIVE_DISABLE;
   if (HAL_LCD_Init(&hlcd) != HAL_OK)
   {
-    Error_Handler(1);
+    Error_Handler(11);
   }
 
 }
@@ -547,7 +548,7 @@ static void MX_QUADSPI_Init(void)
   hqspi.Init.ClockMode = QSPI_CLOCK_MODE_0;
   if (HAL_QSPI_Init(&hqspi) != HAL_OK)
   {
-    Error_Handler(1);
+    Error_Handler(11);
   }
 
 }
@@ -582,7 +583,7 @@ static void MX_SAI1_Init(void)
   hsai_BlockA1.SlotInit.SlotActive = 0x00000000;
   if (HAL_SAI_Init(&hsai_BlockA1) != HAL_OK)
   {
-    Error_Handler(1);
+    Error_Handler(11);
   }
 
   hsai_BlockB1.Instance = SAI1_Block_B;
@@ -609,7 +610,7 @@ static void MX_SAI1_Init(void)
   hsai_BlockB1.SlotInit.SlotActive = 0x00000000;
   if (HAL_SAI_Init(&hsai_BlockB1) != HAL_OK)
   {
-    Error_Handler(1);
+    Error_Handler(11);
   }
 
 }
@@ -634,7 +635,7 @@ static void MX_SPI2_Init(void)
   hspi2.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
   if (HAL_SPI_Init(&hspi2) != HAL_OK)
   {
-    Error_Handler(1);
+    Error_Handler(11);
   }
 
 }
@@ -655,7 +656,7 @@ static void MX_USART2_UART_Init(void)
   huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
   if (HAL_UART_Init(&huart2) != HAL_OK)
   {
-    Error_Handler(1);
+    Error_Handler(11);
   }
 
 }
@@ -835,7 +836,7 @@ HAL_StatusTypeDef CAN_Polling(void)
   if(HAL_CAN_Transmit(&hcan1, 10) != HAL_OK)
   {
     /* Transmission Error */
-    Error_Handler(1);
+    Error_Handler(2);
   }
 
   if(HAL_CAN_GetState(&hcan1) != HAL_CAN_STATE_READY)
@@ -847,7 +848,7 @@ HAL_StatusTypeDef CAN_Polling(void)
   if(HAL_CAN_Receive(&hcan1, CAN_FIFO0,10) != HAL_OK)
   {
     /* Reception Error */
-    Error_Handler(1);
+    Error_Handler(3);
   }
 
   if(HAL_CAN_GetState(&hcan1) != HAL_CAN_STATE_READY)
@@ -1158,7 +1159,7 @@ static void TEST_CAN( void* pvParams )
 			if(HAL_CAN_Transmit(&hcan1, 10) != HAL_OK)
 			{
 				/* Transmition Error */
-				Error_Handler(5);
+				Error_Handler(2);
 			}
 			HAL_Delay(10);
 		}
@@ -1242,35 +1243,19 @@ static void TEST_GenericFuncV3( void* params)
 {
 
   // Actual task number
-  uint8_t this_task = *((uint8_t*) params);
+  uint8_t this_task = (uint8_t*) params;
   uint8_t cpu_dest = 0;
   uint8_t instance=0;
+  uint8_t state0=1, state1=1, state2=1, state3=1, state5=1;
   // Instance counter. It begins in -1 because the initial increment
 //  int this_job = -1;
   uint8_t usDataSend=5, usDataReceive, i;
 
   for(;;)
   {
-  	switch(this_task)
-  	{
-  	case 1:
-  		HAL_GPIO_WritePin(GPIOE, GPIO_PIN_0, GPIO_PIN_SET);
-  		break;
-  	case 2:
-  		HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5, GPIO_PIN_SET);
-  		break;
-  	case 3:
-  		HAL_GPIO_WritePin(GPIOE, GPIO_PIN_1, GPIO_PIN_SET);
-  		break;
-  	case 4:
-  		HAL_GPIO_WritePin(GPIOE, GPIO_PIN_2, GPIO_PIN_SET);
-  		break;
-  	case 5:
-  		HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, GPIO_PIN_SET);
-  		break;
-  	}
 
-    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_SET);
+
+//    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_SET);
     act_task=this_task;
   	// TEST - Keep the green LED on while task 1 is running in cpu 1 (task 3 for cpu 2)
   	if( (THIS_CPU == 1 && this_task == 1) || (THIS_CPU == 2 && this_task == 3) )
@@ -1279,6 +1264,32 @@ static void TEST_GenericFuncV3( void* params)
 
   	// Wait for TickHook unlock the task with a notification ( Offline Scheduling)
   	ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+  	switch(this_task)
+  	{
+  	case 1:
+  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, state0);
+  		state0=!state0;
+  		break;
+  	case 2:
+  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, state5);
+  		state5=!state5;
+  		break;
+  	case 3:
+  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, state1);
+  		state1=!state1;
+  		break;
+  	case 4:
+  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, state2);
+  		state2=!state2;
+  		break;
+  	case 5:
+  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, state3);
+  		state3=!state3;
+  		break;
+  	}
+
+//    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_SET);
 
   	// TEST - Keep the green LED on while task 1 is running in cpu 1 (task 3 for cpu 2)
   	if( (THIS_CPU == 1 && this_task == 1) || (THIS_CPU == 2 && this_task == 3) )
@@ -1291,7 +1302,7 @@ static void TEST_GenericFuncV3( void* params)
   	  			xQueueReceive(xQueues[this_task-1], &usDataReceive, portMAX_DELAY);
 
     // Simulates the work done by the the task
-    vUtilsEatCpu( (TickType_t) ((double) wcets[this_task]) );
+    vUtilsEatCpu( (TickType_t) ((double) wcets[this_task-1]) );
 
   	// Send messages to all successor tasks
   	for ( i=0; i<MSG_CNT; ++i )
@@ -1300,7 +1311,7 @@ static void TEST_GenericFuncV3( void* params)
   		{
   			// OJO Verificar número de instancia
   			instance = (uint8_t)(xTaskGetTickCount()%HYPERPERIOD)/periods[this_task-1];
-  			cpu_dest= job_cpu[this_task-1][instance];
+  			cpu_dest= job_cpu[this_task-1][instance-1];
   			// Check if the successor task is in this cpu
   			if( cpu_dest == THIS_CPU )
   				xQueueSend(xQueues[msgs[i][1]-1], &usDataSend, portMAX_DELAY);
@@ -1311,7 +1322,7 @@ static void TEST_GenericFuncV3( void* params)
   				 if(HAL_CAN_Transmit_IT(&hcan1) != HAL_OK)
   				  {
   				    /* Transmission Error */
-  				    Error_Handler(1);
+  				    Error_Handler(2);
   				  }
   			}
   		}
@@ -1335,7 +1346,7 @@ static void TEST_GenericFuncV2( void* params)
   {
   	ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     // Simulate the work doing by the the task
-    vUtilsEatCpu( (TickType_t) ((double) wcets[this_task]) );
+    vUtilsEatCpu( (TickType_t) ((double) wcets[this_task-1]) );
 
 
   }
@@ -1392,6 +1403,7 @@ void vUtilsEatCpu( UBaseType_t ticks )
 void vApplicationTickHook(void)
 {
 	/* Configure the main PLL clock source, multiplication and division factors. */
+
   uint8_t nxt_task=1;
 	TickType_t xTick;
 	uint32_t PLLRDiv = 0;
@@ -1468,7 +1480,7 @@ void vApplicationTickHook(void)
 			__portNVIC_SYSTICK_LOAD_REG = ( configCPU_CLOCK_HZ / configTICK_RATE_HZ ) - 1UL;
 			__portNVIC_SYSTICK_CTRL_REG = ( portNVIC_SYSTICK_CLK_BIT | portNVIC_SYSTICK_INT_BIT | portNVIC_SYSTICK_ENABLE_BIT );
 
-			nxt_task=(uint8_t)(plan[xTick %HYPERPERIOD][THIS_CPU-1]);
+			nxt_task=(uint8_t)(plan[THIS_CPU-1][xTick %HYPERPERIOD]);
 			if (nxt_task && (act_task != nxt_task))
 			{
 				/* Notify the task that the transmission is complete. */
