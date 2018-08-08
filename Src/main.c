@@ -103,7 +103,7 @@ const uint8_t job_freq[TASK_CNT][3] = {{050,050,050},
 uint8_t job_cnt[TASK_CNT]; 			// Number of instances for each task
 
 const uint8_t plan[ CPU_CNT ][HYPERPERIOD] = {{1,1,1,1,2,2,2,2,2,2,2,2,5,5,5,3,3,3,3,3,3,5,5,5,5,5,5,0,0,0},
-																				 {3,3,3,3,3,3,4,4,4,0,1,1,1,1,2,2,2,2,0,0,1,1,1,1,2,2,4,4,4,0}};
+											  {3,3,3,3,3,3,4,4,4,0,1,1,1,1,2,2,2,2,0,0,1,1,1,1,2,2,4,4,4,0}};
 
 const uint8_t plan_freq[ CPU_CNT ][HYPERPERIOD] = {{50,50,50,50,25,25,25,25,25,25,25,25,100,100,100,50,50,50,50,50,50,50,50,50,50,50,50,0,0,0},
 		 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	 	{50,50,50,50,50,50,100,100,100,0,50,50,50,50,50,50,50,50,0,0,50,50,50,50,100,100,100,100,100,0}};
@@ -1244,9 +1244,13 @@ static void TEST_GenericFuncV3( void* params)
 
   // Actual task number
   uint8_t this_task = (uint8_t*) params;
-  uint8_t cpu_dest = 0;
+  uint8_t act_tick=0;
   uint8_t instance=0;
+  uint8_t dest_task = 0;
+  uint8_t dest_cpu = 0;
+
   uint8_t state0=1, state1=1, state2=1, state3=1, state5=1;
+
   // Instance counter. It begins in -1 because the initial increment
 //  int this_job = -1;
   uint8_t usDataSend=5, usDataReceive, i;
@@ -1262,30 +1266,56 @@ static void TEST_GenericFuncV3( void* params)
   		HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_RESET);
 //  	HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED, GPIO_PIN_RESET);
 
+  	switch(this_task)
+  	{
+  	case 1:
+  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, GPIO_PIN_RESET); // state0);
+//  		state0=!state0;
+  		break;
+  	case 2:
+  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET); //  state5);
+//  		state5=!state5;
+  		break;
+  	case 3:
+  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET); //  state1);
+//  		state1=!state1;
+  		break;
+  	case 4:
+  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_RESET); //  state2);
+//  		state2=!state2;
+  		break;
+  	case 5:
+  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_RESET); //  state3);
+//  		state3=!state3;
+  		break;
+  	}
+
+
+
   	// Wait for TickHook unlock the task with a notification ( Offline Scheduling)
   	ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
   	switch(this_task)
   	{
   	case 1:
-  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, state0);
-  		state0=!state0;
+  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, GPIO_PIN_SET); //   state0);
+//  		state0=!state0;
   		break;
   	case 2:
-  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, state5);
-  		state5=!state5;
+  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); //   state5);
+//  		state5=!state5;
   		break;
   	case 3:
-  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, state1);
-  		state1=!state1;
+  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_SET); //   state1);
+//  		state1=!state1;
   		break;
   	case 4:
-  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, state2);
-  		state2=!state2;
+  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_SET); //   state2);
+//  		state2=!state2;
   		break;
   	case 5:
-  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, state3);
-  		state3=!state3;
+  		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_SET); //   state3);
+//  		state3=!state3;
   		break;
   	}
 
@@ -1304,20 +1334,21 @@ static void TEST_GenericFuncV3( void* params)
     // Simulates the work done by the the task
     vUtilsEatCpu( (TickType_t) ((double) wcets[this_task-1]) );
 
+    act_tick=(uint8_t)(xTaskGetTickCount()%HYPERPERIOD);
   	// Send messages to all successor tasks
   	for ( i=0; i<MSG_CNT; ++i )
   		// Check if this task sends messages
   		if(msgs[i][0] == this_task)
   		{
-  			// OJO Verificar número de instancia
-  			instance = (uint8_t)(xTaskGetTickCount()%HYPERPERIOD)/periods[this_task-1];
-  			cpu_dest= job_cpu[this_task-1][instance-1];
+  			dest_task=msgs[i][1];
+  			instance = act_tick/periods[dest_task-1];
+  			dest_cpu= job_cpu[dest_task-1][instance];
   			// Check if the successor task is in this cpu
-  			if( cpu_dest == THIS_CPU )
-  				xQueueSend(xQueues[msgs[i][1]-1], &usDataSend, portMAX_DELAY);
+  			if( dest_cpu == THIS_CPU )
+  				xQueueSend(xQueues[dest_task-1], &usDataSend, portMAX_DELAY);
   			else
   			{
-  				hcan1.pTxMsg->StdId = (cpu_dest<<9)	| msgs[i][1];
+  				hcan1.pTxMsg->StdId = (dest_cpu<<9)	| dest_task;
   				hcan1.pTxMsg->Data[0]= usDataSend;
   				 if(HAL_CAN_Transmit_IT(&hcan1) != HAL_OK)
   				  {

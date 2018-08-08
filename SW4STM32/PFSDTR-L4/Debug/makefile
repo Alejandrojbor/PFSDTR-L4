@@ -17,11 +17,11 @@ RM := rm -rf
 -include objects.mk
 
 ifneq ($(MAKECMDGOALS),clean)
-ifneq ($(strip $(C_DEPS)),)
--include $(C_DEPS)
-endif
 ifneq ($(strip $(S_UPPER_DEPS)),)
 -include $(S_UPPER_DEPS)
+endif
+ifneq ($(strip $(C_DEPS)),)
+-include $(C_DEPS)
 endif
 endif
 
@@ -33,10 +33,10 @@ endif
 all: PFSDTR-L4.elf
 
 # Tool invocations
-PFSDTR-L4.elf: $(OBJS) $(USER_OBJS)
+PFSDTR-L4.elf: $(OBJS) $(USER_OBJS) ../STM32L476VGTx_FLASH.ld
 	@echo 'Building target: $@'
 	@echo 'Invoking: MCU GCC Linker'
-	arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16 -specs=nosys.specs -specs=nano.specs -T"../STM32L476VGTx_FLASH.ld" -Wl,-Map=output.map -Wl,--gc-sections -lm -o "PFSDTR-L4.elf" @"objects.list" $(USER_OBJS) $(LIBS)
+	arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16 -specs=nosys.specs -specs=nano.specs -T"../STM32L476VGTx_FLASH.ld" -Wl,-Map=output.map -Wl,--gc-sections -o "PFSDTR-L4.elf" @"objects.list" $(USER_OBJS) $(LIBS) -lm
 	@echo 'Finished building target: $@'
 	@echo ' '
 	$(MAKE) --no-print-directory post-build
