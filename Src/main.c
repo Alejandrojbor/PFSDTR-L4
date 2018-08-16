@@ -74,6 +74,8 @@ UART_HandleTypeDef huart2;
 
 RCC_OscInitTypeDef RCC_OscInitStruct;
 
+//Variable utilizada para togglear salida de ticks;
+uint8_t state0 = 0;
 //uint32_t current_freq = 100;
 uint8_t frq = 25;
 
@@ -110,7 +112,8 @@ const uint8_t plan_freq[ CPU_CNT ][HYPERPERIOD] = {{50,50,50,50,25,25,25,25,25,2
 
 TaskHandle_t xHandles[TASK_CNT];
 
-uint8_t act_task=3;
+#define THIS_CPU	1		// Current cpu number
+uint8_t act_task;
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
@@ -135,6 +138,7 @@ static void TEST_GenericFuncV3( void* params);
 //static void Task_Body2( void* pvParams );
 //static void Task_Body3( void* pvParams );
 
+void vApplicationIdleHook( void );
 
 /* Private function prototypes -----------------------------------------------*/
 HAL_StatusTypeDef ALE_CAN_Receive_IT(CAN_HandleTypeDef *hcan, uint8_t FIFONumber);
@@ -193,6 +197,18 @@ for (uint8_t i=0; i<TASK_CNT; ++i)
 	}
 }
 
+	// Testigo de que el sistema se encuentra detenido ac�
+	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_SET);
+	while(HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_7) == GPIO_PIN_SET){
+		asm("nop");
+	}
+	// Testigo de que el sistema arranco
+	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_RESET);
+
+	// Notifico a la primera tarea que se tiene que ejecutar.
+	act_task = 1;
+	xTaskNotifyGive( xHandles[ 0 ]); // para CPU 1
+	//xTaskNotifyGive( xHandles[ 2 ]); // para CPU 2
 
 //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, GPIO_PIN_SET);
   /* Start scheduler */
@@ -817,7 +833,11 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_RESET);
-
+  
+	GPIO_InitStruct.Pin = GPIO_PIN_7;
+	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+	GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 }
 
 /**
@@ -1237,6 +1257,19 @@ static void TEST_FreqSwitch( void* pvParams )
 	vTaskDelete( NULL );
 }
 
+void vApplicationIdleHook( void)
+{
+	for(;;)
+	{
+		//if (act_task == 0){
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_RESET);
+		//}
+	}	vTaskDelete( NULL );
+}
 
 static void TEST_GenericFuncV3( void* params)
 // Generic task (The task number is passed as "params" argument )
@@ -1249,10 +1282,10 @@ static void TEST_GenericFuncV3( void* params)
   uint8_t dest_task = 0;
   uint8_t dest_cpu = 0;
 
-  uint8_t state0=1, state1=1, state2=1, state3=1, state5=1;
+  //uint8_t state0=1, state1=1, state2=1, state3=1, state5=1;
 
   // Instance counter. It begins in -1 because the initial increment
-//  int this_job = -1;
+  // int this_job = -1;
   uint8_t usDataSend=5, usDataReceive, i;
 
   for(;;)
@@ -1260,11 +1293,12 @@ static void TEST_GenericFuncV3( void* params)
 
 
 //    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_SET);
-    act_task=this_task;
+    //act_task = this_task;
   	// TEST - Keep the green LED on while task 1 is running in cpu 1 (task 3 for cpu 2)
-  	if( (THIS_CPU == 1 && this_task == 1) || (THIS_CPU == 2 && this_task == 3) )
-  		HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_RESET);
+//  	if( (THIS_CPU == 1 && this_task == 1) || (THIS_CPU == 2 && this_task == 3) )
+//  		HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_RESET);
 //  	HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED, GPIO_PIN_RESET);
+/*
 
   	switch(this_task)
   	{
@@ -1292,8 +1326,16 @@ static void TEST_GenericFuncV3( void* params)
 
 
 
+  	*/
   	// Wait for TickHook unlock the task with a notification ( Offline Scheduling)
   	ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+  	act_task = this_task;
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_RESET);
 
   	switch(this_task)
   	{
@@ -1322,8 +1364,8 @@ static void TEST_GenericFuncV3( void* params)
 //    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_SET);
 
   	// TEST - Keep the green LED on while task 1 is running in cpu 1 (task 3 for cpu 2)
-  	if( (THIS_CPU == 1 && this_task == 1) || (THIS_CPU == 2 && this_task == 3) )
-  		HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_SET);
+//  	if( (THIS_CPU == 1 && this_task == 1) || (THIS_CPU == 2 && this_task == 3) )
+//  		HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_SET);
 //  	HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED, GPIO_PIN_SET);
 
   	// Receive messages from all precedent tasks
@@ -1334,9 +1376,9 @@ static void TEST_GenericFuncV3( void* params)
     // Simulates the work done by the the task
     vUtilsEatCpu( (TickType_t) ((double) wcets[this_task-1]) );
 
-    act_tick=(uint8_t)(xTaskGetTickCount()%HYPERPERIOD);
+    act_tick = (uint8_t)(xTaskGetTickCount()%HYPERPERIOD);
   	// Send messages to all successor tasks
-  	for ( i=0; i<MSG_CNT; ++i )
+  	for ( i=0; i<MSG_CNT; ++i ){
   		// Check if this task sends messages
   		if(msgs[i][0] == this_task)
   		{
@@ -1350,13 +1392,15 @@ static void TEST_GenericFuncV3( void* params)
   			{
   				hcan1.pTxMsg->StdId = (dest_cpu<<9)	| dest_task;
   				hcan1.pTxMsg->Data[0]= usDataSend;
-  				 if(HAL_CAN_Transmit_IT(&hcan1) != HAL_OK)
-  				  {
-  				    /* Transmission Error */
-  				    Error_Handler(2);
-  				  }
-  			}
-  		}
+				HAL_StatusTypeDef stats = HAL_CAN_Transmit_IT(&hcan1);
+				if (stats == HAL_ERROR)
+					Error_Handler(2);
+				else if (stats == HAL_TIMEOUT)
+					Error_Handler(3);
+			}
+		}
+  	}
+  	/*  	
 
   }
 
@@ -1411,7 +1455,8 @@ void TEST_GenericFunc( void* params)
     }
 
     vTaskDelayUntil( &xPreviousWakeTime, (TickType_t) periods[this_task] );
-  }
+*/
+    }
 
   vTaskDelete( NULL );
 }
@@ -1422,10 +1467,109 @@ void vUtilsEatCpu( UBaseType_t ticks )
 	BaseType_t xI;
 
     //BaseType_t xLim = ( ticks * ONE_TICK ) / 5;
-	BaseType_t xLim = ( ticks * ONE_TICK ); // 100;
+	BaseType_t xLim = ( ticks * ONE_TICK )/ 100;
 
 	for( xI = 0; xI < xLim; xI++ )
 	{
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
+		asm("nop");
 		asm("nop");
 	}
 }
@@ -1447,11 +1591,18 @@ void vApplicationTickHook(void)
  * The other one is another task (i.e. TickHook) suspends the task as:
  * vTaskSuspend( xHandle );
  */
+  	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, state0);
+  	state0 = !state0;
+
 	xTick = xTaskGetTickCountFromISR() % HYPERPERIOD;
+
+	//act_task = (uint8_t)(plan[THIS_CPU-1][(xTick) % HYPERPERIOD]);
+
 	// Verificar si el TickHook se llama antes o despues del incremento del TickCount y ajustar xTick
 	// (En teoria xTickCount se incrementa previo al al llamado de TickHook, verificar con hardware
 //	Para igualar en todos los uC las demoras introducidas por los cambios de frecuencia se solicitará el cambio de
 //	 la misma, incluso si en la siguiente ranura se usa la misma frecuencia.
+/*
 //	if ( plan[THIS_CPU][xTick] != plan[THIS_CPU][ (xTick+1) % HYPERPERIOD ] )
 //	{
 //		if ( plan_freq[THIS_CPU][xTick] != plan_freq[THIS_CPU][ (xTick+1) % HYPERPERIOD ] )
@@ -1511,7 +1662,8 @@ void vApplicationTickHook(void)
 			__portNVIC_SYSTICK_LOAD_REG = ( configCPU_CLOCK_HZ / configTICK_RATE_HZ ) - 1UL;
 			__portNVIC_SYSTICK_CTRL_REG = ( portNVIC_SYSTICK_CLK_BIT | portNVIC_SYSTICK_INT_BIT | portNVIC_SYSTICK_ENABLE_BIT );
 
-			nxt_task=(uint8_t)(plan[THIS_CPU-1][xTick %HYPERPERIOD]);
+//			nxt_task=(uint8_t)(plan[THIS_CPU-1][xTick %HYPERPERIOD]);
+			nxt_task = (uint8_t)(plan[THIS_CPU-1][(xTick+1) % HYPERPERIOD]);
 			if (nxt_task && (act_task != nxt_task))
 			{
 				/* Notify the task that the transmission is complete. */
