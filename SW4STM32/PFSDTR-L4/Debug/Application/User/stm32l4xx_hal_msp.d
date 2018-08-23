@@ -1,5 +1,5 @@
 Application/User/stm32l4xx_hal_msp.o: \
- /home/ale/.AC6_v2.4/SystemWorkbench/workspace/PFSDTR-L4/Src/stm32l4xx_hal_msp.c \
+ ../Application/User/stm32l4xx_hal_msp.c \
  /home/ale/.AC6_v2.4/SystemWorkbench/workspace/PFSDTR-L4/Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal.h \
  /home/ale/.AC6_v2.4/SystemWorkbench/workspace/PFSDTR-L4/Inc/stm32l4xx_hal_conf.h \
  /home/ale/.AC6_v2.4/SystemWorkbench/workspace/PFSDTR-L4/Inc/main.h \

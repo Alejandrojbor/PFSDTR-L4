@@ -1,5 +1,4 @@
-Application/User/freertos.o: \
- /home/ale/.AC6_v2.4/SystemWorkbench/workspace/PFSDTR-L4/Src/freertos.c \
+Application/User/freertos.o: ../Application/User/freertos.c \
  /home/ale/.AC6_v2.4/SystemWorkbench/workspace/PFSDTR-L4/Middlewares/Third_Party/FreeRTOS/Source/include/FreeRTOS.h \
  /home/ale/.AC6_v2.4/SystemWorkbench/workspace/PFSDTR-L4/Inc/FreeRTOSConfig.h \
  /home/ale/.AC6_v2.4/SystemWorkbench/workspace/PFSDTR-L4/Inc/main.h \
