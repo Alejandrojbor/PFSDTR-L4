@@ -12,8 +12,8 @@
 <targetDefinitions>
   <board id="stm32l476g-disco">
     <name>STM32L476G-DISCO</name>
-    <dbgIF>SWD</dbgIF>
     <dbgIF>JTAG</dbgIF>
+    <dbgIF>SWD</dbgIF>
     <dbgDEV>ST-Link</dbgDEV>
     <mcuId>stm32l476vgtx</mcuId>
   </board>

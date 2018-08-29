@@ -54,6 +54,8 @@
 #include "task.h"
 #include "queue.h"
 
+#define THIS_CPU	2		// Current cpu number
+
 //#define CPU_CNT             // Corregir error de compilacion cuando se define en main.h
 /* Private variables ---------------------------------------------------------*/
 CAN_HandleTypeDef hcan1;
@@ -112,7 +114,7 @@ const uint8_t plan_freq[ CPU_CNT ][HYPERPERIOD] = {{50,50,50,50,25,25,25,25,25,2
 
 TaskHandle_t xHandles[TASK_CNT];
 
-#define THIS_CPU	1		// Current cpu number
+
 uint8_t act_task;
 
 /* Private function prototypes -----------------------------------------------*/
@@ -205,10 +207,24 @@ for (uint8_t i=0; i<TASK_CNT; ++i)
 	// Testigo de que el sistema arranco
 	HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN, GPIO_PIN_RESET);
 
+	xTaskNotifyStateClear( xHandles[ 0 ] );
+	xTaskNotifyStateClear( xHandles[ 1 ] );
+	xTaskNotifyStateClear( xHandles[ 2 ] );
+	xTaskNotifyStateClear( xHandles[ 3 ] );
+	xTaskNotifyStateClear( xHandles[ 4 ] );
+
 	// Notifico a la primera tarea que se tiene que ejecutar.
-	act_task = 1;
-	xTaskNotifyGive( xHandles[ 0 ]); // para CPU 1
-	//xTaskNotifyGive( xHandles[ 2 ]); // para CPU 2
+	if (THIS_CPU == 1)
+		{
+		act_task = 1;
+		xTaskNotifyGive( xHandles[ 0 ]); // para CPU 1
+		}
+	else if (THIS_CPU == 2)
+	{
+		act_task = 3;
+		xTaskNotifyGive( xHandles[ 2 ]); // para CPU 2
+	}
+
 
 //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, GPIO_PIN_SET);
 
@@ -217,6 +233,7 @@ for (uint8_t i=0; i<TASK_CNT; ++i)
 	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_1, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_2, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_RESET);
+
 
   /* Start scheduler */
   vTaskStartScheduler();
@@ -436,6 +453,8 @@ static void MX_CAN1_Init(void)
 //		/* Filter configuration Error */
 //		Error_Handler(1);
 //	}
+//
+
 	// Filter configuration
   // There are 4 filters of 16 bits each in ID list mode per bank
 	sFilterConfig.FilterMode = CAN_FILTERMODE_IDLIST;
@@ -953,9 +972,19 @@ void HAL_CAN_RxCpltCallback(CAN_HandleTypeDef* hcan)
 // 		HAL_Delay(50);
 //
 //  	}
-
 	/* We have not woken a task at the start of the ISR. */
 	xHigherPriorityTaskWoken = pdFALSE;
+
+	//Borrar despues de debuguear
+	if (THIS_CPU == 1)
+		{
+		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_2); // para CPU 1
+		}
+	else if (THIS_CPU == 2)
+	{
+		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_3); // para CPU 2
+	}
+
   // Sends the received message from CAN to the corresponding queue
 	xQueueSendFromISR( xQueues[hcan->pRxMsg->FMI], &hcan->pRxMsg->Data[0], &xHigherPriorityTaskWoken );
 
@@ -1295,6 +1324,7 @@ static void TEST_GenericFuncV3( void* params)
   // int this_job = -1;
   uint8_t usDataSend=5, usDataReceive, i;
 
+
   for(;;)
   {
 
@@ -1356,7 +1386,10 @@ static void TEST_GenericFuncV3( void* params)
   	// Receive messages from all precedent tasks
   	for ( i=0; i<MSG_CNT; ++i )
   	  		if(msgs[i][1] == this_task)
-  	  			xQueueReceive(xQueues[this_task-1], &usDataReceive, portMAX_DELAY);
+  	  		{
+				xQueueReceive(xQueues[this_task-1], &usDataReceive, portMAX_DELAY);
+  	  		}
+
 
   	switch(this_task)
   	{
@@ -1426,6 +1459,7 @@ static void TEST_GenericFuncV3( void* params)
   				hcan1.pTxMsg->StdId = (dest_cpu<<9)	| dest_task;
   				hcan1.pTxMsg->Data[0]= usDataSend;
 				HAL_StatusTypeDef stats = HAL_CAN_Transmit_IT(&hcan1);
+
 				if (stats == HAL_ERROR)
 					Error_Handler(2);
 				else if (stats == HAL_TIMEOUT)
@@ -1499,7 +1533,7 @@ void vUtilsEatCpu( UBaseType_t ticks )
 {
 	BaseType_t xI;
 
-    BaseType_t xLim = ( ticks * ONE_TICK ) / 5;
+    BaseType_t xLim = ( ticks * ONE_TICK ) / 8;
 //	BaseType_t xLim = ( ticks * ONE_TICK )/ 100;
 
 	for( xI = 0; xI < xLim; xI++ )
